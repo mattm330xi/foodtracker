@@ -36,11 +36,11 @@ npm run build
 ### Deploy to Cloudflare
 
 ```bash
-# Set your Cloudflare API token
-source ~/mattm330xicfVars
+# Set your Cloudflare API credentials (export CF_API_TOKEN and CF_ACCOUNT_ID)
+source ~/your_cf_env_vars
 
 # Deploy
-npx wrangler deploy
+npm run build && npx wrangler deploy
 ```
 
 ### Database

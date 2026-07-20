@@ -1,4 +1,4 @@
-const CACHE_NAME = 'foodtracker-v1';
+const CACHE_NAME = 'foodtracker-v3';
 const OFFLINE_URLS = ['/'];
 
 self.addEventListener('install', (event) => {
@@ -19,9 +19,18 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  // Don't cache API calls or non-200 responses
+  const url = new URL(event.request.url);
+  if (url.pathname.startsWith('/api/')) return;
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
+        // Only cache successful responses
+        if (!response || response.status !== 200 || response.type === 'error') {
+          return response;
+        }
         const clone = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;

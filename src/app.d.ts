@@ -2,7 +2,11 @@
 // for information about these interfaces
 declare global {
   namespace App {
-    interface Locals {}
+    interface Locals {
+      userId: number;
+      username: string;
+      timezone: string;
+    }
     interface Platform {
       env: {
         FTD1: D1Database;

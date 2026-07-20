@@ -1,0 +1,1 @@
+ALTER TABLE entries ADD COLUMN day_notes TEXT DEFAULT '';

@@ -22,5 +22,8 @@
     "vite": "^6.0.0",
     "wrangler": "^3.0.0"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@simplewebauthn/browser": "^13.3.0"
+  }
 }
