@@ -6,10 +6,8 @@ export const handle: Handle = async ({ event, resolve }) => {
   // Skip auth for login page, auth API, barcode API, and static assets
   if (
     url === '/login' ||
-    url.startsWith('/passkey-setup') ||
     url.startsWith('/api/auth') ||
     url.startsWith('/api/barcode') ||
-    url.startsWith('/api/passkey-setup') ||
     url.startsWith('/_app') ||
     url === '/manifest.json' ||
     url === '/sw.js' ||

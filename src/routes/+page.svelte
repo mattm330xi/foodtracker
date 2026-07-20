@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
 
   interface Entry {
     id: number;
@@ -47,11 +47,11 @@
   let reactionNotes = $state('');
 
   // Barcode
+  import { Html5Qrcode } from 'html5-qrcode';
   let showBarcode = $state(false);
-  let barcodeInput = $state('');
   let barcodeResult: any = $state(null);
   let barcodeLoading = $state(false);
-  let barcodeInputEl: HTMLInputElement;
+  let barcodeScanner: Html5Qrcode | null = null;
 
   // Favorites
   let favorites: any[] = $state([]);
@@ -155,6 +155,14 @@
     loadTemplates();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(console.error);
+    }
+  });
+
+  $effect(() => {
+    if (showBarcode) {
+      tick().then(() => startBarcodeScanner());
+    } else {
+      stopBarcodeScanner();
     }
   });
 
@@ -385,11 +393,12 @@
     templates = templates.filter((t: any) => t.id !== id);
   }
 
-  async function lookupBarcode() {
-    if (!barcodeInput) return;
+  async function lookupBarcode(code: string) {
+    if (!code) return;
     barcodeLoading = true;
     barcodeResult = null;
-    const res = await fetch(`/api/barcode?barcode=${barcodeInput}`);
+    stopBarcodeScanner();
+    const res = await fetch(`/api/barcode?barcode=${code}`);
     barcodeResult = await res.json();
     barcodeLoading = false;
   }
@@ -405,7 +414,36 @@
     text = notes;
     showBarcode = false;
     barcodeResult = null;
-    barcodeInput = '';
+  }
+
+  function stopBarcodeScanner() {
+    if (barcodeScanner) {
+      barcodeScanner.stop().catch(() => {});
+      barcodeScanner.clear();
+      barcodeScanner = null;
+    }
+  }
+
+  async function startBarcodeScanner() {
+    barcodeResult = null;
+    barcodeLoading = false;
+    await tick();
+    const el = document.getElementById('barcode-reader');
+    if (!el) return;
+    barcodeScanner = new Html5Qrcode('barcode-reader');
+    try {
+      await barcodeScanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 150 } },
+        (decodedText) => {
+          lookupBarcode(decodedText);
+        },
+        () => {}
+      );
+    } catch (e: any) {
+      console.error('Camera error:', e);
+      barcodeResult = { found: false, error: e?.message || 'Camera access denied' };
+    }
   }
 
   function timeOnly(iso: string) {
@@ -446,7 +484,7 @@
       <a href="/stats" class="icon-btn">📈</a>
       <button class="icon-btn" onclick={() => showFavorites = true}>⭐</button>
       <button class="icon-btn" onclick={() => showTemplates = true}>📋</button>
-      <button class="icon-btn" onclick={() => showBarcode = true}>📊</button>
+      <button class="icon-btn" onclick={() => showBarcode = true} title="Scan barcode"><svg width="18" height="18" viewBox="0 0 18 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="2" width="2" height="16" fill="currentColor"/><rect x="5" y="2" width="1" height="16" fill="currentColor"/><rect x="8" y="2" width="3" height="16" fill="currentColor"/><rect x="13" y="2" width="1" height="16" fill="currentColor"/><rect x="16" y="2" width="1" height="16" fill="currentColor"/></svg></button>
       <button class="icon-btn" onclick={() => showReactionForm = true}>⚠️</button>
       <button class="icon-btn" onclick={() => showCalendar = !showCalendar}>📅</button>
       <a href="/profile" class="icon-btn">👤</a>
@@ -531,16 +569,13 @@
   {/if}
 
   {#if showBarcode}
-    <div class="modal-overlay" onclick={() => { showBarcode = false; barcodeResult = null; }}></div>
-    <div class="modal">
-      <h3>Barcode Lookup</h3>
-      <div class="barcode-row">
-        <input bind:this={barcodeInputEl} bind:value={barcodeInput} placeholder="Enter or scan barcode" class="modal-input" />
-        <button class="submit" onclick={lookupBarcode} disabled={barcodeLoading}>
-          {barcodeLoading ? '...' : 'Look up'}
-        </button>
-      </div>
-      {#if barcodeResult?.found}
+    <div class="modal-overlay" onclick={() => { showBarcode = false; stopBarcodeScanner(); barcodeResult = null; }}></div>
+    <div class="modal barcode-modal">
+      <h3>Scan Barcode</h3>
+      <div id="barcode-reader" class="barcode-reader"></div>
+      {#if barcodeLoading}
+        <p class="not-found">Looking up product...</p>
+      {:else if barcodeResult?.found}
         <div class="barcode-result">
           <strong>{barcodeResult.name}</strong>
           {#if barcodeResult.brand}<p>{barcodeResult.brand}</p>{/if}
@@ -550,7 +585,7 @@
           <button class="submit" onclick={addBarcodeAsEntry}>Add to notes</button>
         </div>
       {:else if barcodeResult && !barcodeResult.found}
-        <p class="not-found">Product not found</p>
+        <p class="not-found">Product not found. Try scanning again.</p>
       {/if}
     </div>
   {/if}
@@ -799,9 +834,9 @@
   .modal h3 { margin: 0 0 12px; }
   .modal-input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-family: inherit; font-size: 14px; }
   .modal-actions { display: flex; gap: 8px; margin-top: 12px; }
-  .barcode-row { display: flex; gap: 8px; }
-  .barcode-row .modal-input { flex: 1; margin: 0; }
-  .barcode-row .submit { width: auto; margin: 0; padding: 8px 16px; }
+  .barcode-modal { width: 340px; }
+  .barcode-reader { width: 100%; margin-bottom: 12px; }
+  .barcode-reader :global(video) { border-radius: 8px; }
   .barcode-result { margin-top: 12px; padding: 10px; background: #f5f5f5; border-radius: 8px; }
   .barcode-result .submit { margin-top: 8px; }
   .allergens { color: #c00; font-weight: 600; }

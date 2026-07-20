@@ -14,7 +14,7 @@ A progressive web app for tracking everything you eat — photos, notes, organiz
 - **📊 Stats page** — food-reaction correlations, entry/reaction counts over selectable periods
 - **⭐ Favorites** — star entries to save them for quick re-add
 - **📋 Meal templates** — save a day as a template and re-use it
-- **📊 Barcode scanner** — look up products via Open Food Facts
+- **📷 Barcode scanner** — scan barcodes with your camera, look up products via Open Food Facts
 - **🔒 Passkey authentication** — WebAuthn passkeys (Touch ID / Face ID), no passwords
 - **👤 Profile** — manage timezone, add/remove passkeys, sign out
 - **📱 Installable PWA** — add to your home screen
@@ -88,11 +88,10 @@ src/
 ├── hooks.server.ts             # Session validation middleware
 ├── routes/
 │   ├── +layout.svelte          # Service worker registration
-│   ├── +page.svelte            # Main UI (entries, reactions, calendar, favorites, templates, barcode)
+│   ├── +page.svelte            # Main UI (entries, reactions, calendar, favorites, templates, barcode camera scan)
 │   ├── login/+page.svelte      # Passkey login/register
 │   ├── profile/+page.svelte    # Timezone, passkey management, sign out
 │   ├── stats/+page.svelte      # Food-reaction correlation stats
-│   ├── passkey-setup/+page.svelte  # Temporary one-time passkey setup
 │   └── api/
 │       ├── auth/+server.ts     # WebAuthn API (login, register, logout)
 │       ├── entries/+server.ts  # CRUD for food entries
@@ -103,7 +102,6 @@ src/
 │       ├── stats/+server.ts    # Food-reaction correlation stats
 │       ├── profile/+server.ts  # Timezone, passkey management
 │       ├── barcode/+server.ts  # Open Food Facts lookup
-│       └── passkey-setup/+server.ts # Temporary passkey setup endpoint
 static/
 ├── manifest.json               # PWA manifest
 ├── sw.js                       # Service worker (v3, no API caching)
@@ -130,6 +128,7 @@ wrangler.toml                   # Cloudflare Worker config with D1 binding
 - **Manual CBOR parsing + `crypto.subtle`:** avoids Node.js dependencies that don't work on Workers
 - **All timestamps as ISO 8601 UTC:** `new Date().toISOString()` in JS, not SQLite's `datetime('now')`
 - **Session cookie:** `HttpOnly; SameSite=Lax; Path=/` with 60-day Max-Age, rolling refresh on login
+- **html5-qrcode for barcode scanning:** camera-based barcode scanning via `Html5Qrcode`, supports 1D/2D formats on iOS/Android/desktop
 - **No voice button:** phone keyboards have built-in voice-to-text
 - **`npm run build` required before deploy:** `wrangler deploy` does not auto-build
 

@@ -24,6 +24,7 @@
   },
   "type": "module",
   "dependencies": {
-    "@simplewebauthn/browser": "^13.3.0"
+    "@simplewebauthn/browser": "^13.3.0",
+    "html5-qrcode": "^2.3.8"
   }
 }
