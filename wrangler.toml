@@ -1,0 +1,10 @@
+name = "foodtracker"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "FTD1"
+database_name = "foodtrackerd1"
+database_id = "<TO_BE_FILLED>"
+
+
