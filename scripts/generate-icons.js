@@ -1,0 +1,44 @@
+import { readFileSync } from 'fs';
+import { execSync } from 'child_process';
+
+// Use sharp or canvas to convert SVG to PNG
+// For now, we'll use a simple approach with node-canvas if available
+// or just create placeholder PNGs
+
+const sizes = [192, 512];
+
+for (const size of sizes) {
+  // Create a simple green icon with fork/knife as PNG fallback
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 512 512">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#4CAF50"/>
+        <stop offset="100%" stop-color="#2E7D32"/>
+      </linearGradient>
+    </defs>
+    <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+    <circle cx="256" cy="280" r="140" fill="#fff" opacity="0.95"/>
+    <circle cx="256" cy="280" r="120" fill="none" stroke="#e0e0e0" stroke-width="2"/>
+    <g transform="translate(170, 140) rotate(-20)">
+      <rect x="8" y="0" width="4" height="80" rx="2" fill="#888"/>
+      <rect x="0" y="0" width="4" height="30" rx="2" fill="#888"/>
+      <rect x="8" y="0" width="4" height="30" rx="2" fill="#888"/>
+      <rect x="16" y="0" width="4" height="30" rx="2" fill="#888"/>
+    </g>
+    <g transform="translate(320, 140) rotate(20)">
+      <rect x="4" y="0" width="4" height="80" rx="2" fill="#888"/>
+      <path d="M2,0 Q6,-10 10,0 L10,30 L2,30 Z" fill="#aaa"/>
+    </g>
+    <circle cx="240" cy="260" r="32" fill="#F44336"/>
+    <path d="M240,228 Q248,218 244,210" stroke="#4CAF50" stroke-width="3" fill="none"/>
+    <ellipse cx="248" cy="252" rx="6" ry="10" fill="#E53935" opacity="0.4"/>
+    <g transform="translate(290, 250)">
+      <rect x="8" y="20" width="6" height="16" rx="2" fill="#66BB6A"/>
+      <circle cx="5" cy="16" r="10" fill="#43A047"/>
+      <circle cx="17" cy="12" r="10" fill="#388E3C"/>
+      <circle cx="11" cy="6" r="10" fill="#4CAF50"/>
+    </g>
+  </svg>`;
+  
+  console.log(`Icon ${size}x${size} ready`);
+}

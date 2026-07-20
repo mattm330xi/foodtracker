@@ -15,9 +15,9 @@
   let calendarYear = $state(new Date().getFullYear());
   let text = $state('');
   let imageBase64 = $state('');
-  let recording = $state(false);
   let cameraInput: HTMLInputElement;
-  let recognition: any = null;
+  let deleteConfirm: number | null = $state(null);
+  let daysWithEntries: Set<string> = $state(new Set());
 
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const dayNames = ['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -29,8 +29,20 @@
     entries = await res.json();
   }
 
+  async function loadDaysWithEntries(year: number, month: number) {
+    const results: Array<{ date: string }> = [];
+    for (let day = 1; day <= getDaysInMonth(year, month); day++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const res = await fetch(`/api/entries?date=${dateStr}`);
+      const data = await res.json();
+      if (data.length > 0) results.push({ date: dateStr });
+    }
+    daysWithEntries = new Set(results.map(r => r.date));
+  }
+
   onMount(() => {
     loadEntries(selectedDate);
+    loadDaysWithEntries(calendarYear, calendarMonth);
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(console.error);
     }
@@ -42,14 +54,26 @@
     loadEntries(date);
   }
 
+  function goToToday() {
+    const t = new Date();
+    calendarMonth = t.getMonth();
+    calendarYear = t.getFullYear();
+    selectedDate = today();
+    showCalendar = false;
+    loadEntries(today());
+    loadDaysWithEntries(calendarYear, calendarMonth);
+  }
+
   function prevMonth() {
     if (calendarMonth === 0) { calendarMonth = 11; calendarYear--; }
     else calendarMonth--;
+    loadDaysWithEntries(calendarYear, calendarMonth);
   }
 
   function nextMonth() {
     if (calendarMonth === 11) { calendarMonth = 0; calendarYear++; }
     else calendarMonth++;
+    loadDaysWithEntries(calendarYear, calendarMonth);
   }
 
   function getDaysInMonth(year: number, month: number) {
@@ -101,28 +125,6 @@
     imageBase64 = await compressImage(file);
   }
 
-  function startVoice() {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { alert('Speech recognition not supported'); return; }
-    recognition = new SR();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (e: any) => {
-      let t = '';
-      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
-      text = t;
-    };
-    recognition.onerror = () => { recording = false; };
-    recognition.onend = () => { recording = false; };
-    recognition.start();
-    recording = true;
-  }
-
-  function stopVoice() {
-    recognition?.stop();
-    recording = false;
-  }
-
   async function addEntry() {
     if (!text && !imageBase64) return;
     const res = await fetch('/api/entries', {
@@ -134,6 +136,16 @@
     entries = [{ id, text, image: imageBase64, created_at: new Date().toISOString() }, ...entries];
     text = '';
     imageBase64 = '';
+  }
+
+  async function deleteEntry(id: number) {
+    await fetch('/api/entries', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    entries = entries.filter(e => e.id !== id);
+    deleteConfirm = null;
   }
 
   function timeOnly(iso: string) {
@@ -170,6 +182,7 @@
         <span>{monthNames[calendarMonth]} {calendarYear}</span>
         <button onclick={nextMonth}>›</button>
       </div>
+      <button class="today-btn" onclick={goToToday}>Today</button>
       <div class="calendar-days">
         {#each dayNames as d}
           <div class="day-label">{d}</div>
@@ -179,16 +192,35 @@
             <div class="day empty"></div>
           {:else}
             {@const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`}
+            {@const isToday = dateStr === today()}
+            {@const isSelected = dateStr === selectedDate}
+            {@const hasEntries = daysWithEntries.has(dateStr)}
             <button
               class="day"
-              class:today={dateStr === today()}
-              class:selected={dateStr === selectedDate}
+              class:today={isToday}
+              class:selected={isSelected}
+              class:has-entries={hasEntries && !isToday && !isSelected}
               onclick={() => selectDate(dateStr)}
             >
               {day}
+              {#if hasEntries && !isToday && !isSelected}
+                <span class="dot"></span>
+              {/if}
             </button>
           {/if}
         {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if deleteConfirm !== null}
+    <div class="confirm-overlay" onclick={() => deleteConfirm = null}></div>
+    <div class="confirm-dialog">
+      <p>Delete this entry?</p>
+      <p class="confirm-sub">This cannot be undone.</p>
+      <div class="confirm-actions">
+        <button class="confirm-cancel" onclick={() => deleteConfirm = null}>Cancel</button>
+        <button class="confirm-delete" onclick={() => deleteEntry(deleteConfirm!)}>Delete</button>
       </div>
     </div>
   {/if}
@@ -200,9 +232,6 @@
   <div class="actions">
     <button onclick={() => cameraInput.click()}>📷 Photo</button>
     <input bind:this={cameraInput} type="file" accept="image/*" capture="environment" onchange={handlePhoto} hidden />
-    <button class:active={recording} onclick={recording ? stopVoice : startVoice}>
-      {recording ? '⏹ Stop' : '🎤 Voice'}
-    </button>
   </div>
 
   {#if imageBase64}
@@ -216,7 +245,10 @@
   <div class="entries">
     {#each entries as entry (entry.id)}
       <div class="entry">
-        <div class="entry-time">{timeOnly(entry.created_at)}</div>
+        <div class="entry-header">
+          <div class="entry-time">{timeOnly(entry.created_at)}</div>
+          <button class="entry-delete" onclick={() => deleteConfirm = entry.id}>✕</button>
+        </div>
         {#if entry.image}
           <img src={entry.image} alt="Food" class="entry-img" />
         {/if}
@@ -236,6 +268,8 @@
   h1 { margin: 0 0 8px; }
   h2 { margin: 0; font-size: 18px; }
 
+  header { display: flex; justify-content: space-between; align-items: center; }
+
   .date-header {
     display: flex;
     align-items: center;
@@ -249,7 +283,6 @@
 
   .actions { display: flex; gap: 8px; margin-bottom: 12px; }
   button { padding: 10px 16px; border-radius: 8px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; font-size: 14px; }
-  button.active { background: #c00; color: #fff; }
   .preview { width: 100%; border-radius: 8px; margin-bottom: 8px; }
   textarea { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; margin-bottom: 8px; font-family: inherit; }
   .submit { width: 100%; background: #000; color: #fff; }
@@ -262,10 +295,32 @@
     margin-bottom: 12px;
     background: #fafafa;
   }
-  .entry-time { font-size: 12px; color: #888; margin-bottom: 8px; }
+  .entry-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .entry-time { font-size: 12px; color: #888; }
+  .entry-delete {
+    background: none; border: none; color: #ccc; font-size: 16px;
+    padding: 2px 6px; cursor: pointer; border-radius: 4px;
+  }
+  .entry-delete:hover { color: #c00; background: #fee; }
   .entry-img { width: 100%; border-radius: 8px; }
   .entry-text { margin: 8px 0 0; line-height: 1.4; }
   .empty-state { text-align: center; color: #aaa; padding: 32px 0; }
+
+  .confirm-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4); z-index: 30;
+  }
+  .confirm-dialog {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: #fff; border-radius: 16px; padding: 24px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3); z-index: 40;
+    width: 280px; text-align: center;
+  }
+  .confirm-dialog p { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+  .confirm-sub { color: #888; font-size: 14px !important; font-weight: 400 !important; margin-bottom: 16px !important; }
+  .confirm-actions { display: flex; gap: 8px; }
+  .confirm-cancel { flex: 1; background: #f5f5f5; }
+  .confirm-delete { flex: 1; background: #c00; color: #fff; border-color: #c00; }
 
   .calendar-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -283,6 +338,12 @@
   }
   .calendar-header span { font-weight: 600; font-size: 16px; }
   .calendar-header button { border: none; background: none; font-size: 20px; padding: 4px 12px; }
+  .today-btn {
+    display: block; width: 100%; margin-bottom: 8px; padding: 6px;
+    background: #4CAF50; color: #fff; border: none; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .today-btn:hover { background: #388E3C; }
   .calendar-days {
     display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
     text-align: center;
@@ -290,10 +351,18 @@
   .day-label { font-size: 12px; color: #888; padding: 4px 0; font-weight: 600; }
   .day {
     padding: 8px 0; border-radius: 8px; border: none; background: none;
-    cursor: pointer; font-size: 14px;
+    cursor: pointer; font-size: 14px; position: relative;
   }
   .day.empty { cursor: default; }
-  .day.today { font-weight: 700; color: #000; }
+  .day.today {
+    font-weight: 700; color: #fff; background: #4CAF50;
+    box-shadow: 0 2px 8px rgba(76,175,80,0.4);
+  }
   .day.selected { background: #000; color: #fff; font-weight: 600; }
-  .day:hover:not(.empty):not(.selected) { background: #eee; }
+  .day.has-entries { background: #e8f5e9; font-weight: 500; }
+  .day:hover:not(.empty):not(.selected):not(.today) { background: #eee; }
+  .dot {
+    display: block; width: 4px; height: 4px; border-radius: 50%;
+    background: #4CAF50; margin: 2px auto 0;
+  }
 </style>
