@@ -35,8 +35,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
   }
 
   const result = await db.prepare(
-    'INSERT INTO entries (text, image, meal, user_id) VALUES (?, ?, ?, ?)'
-  ).bind(text || '', image || '', autoMeal, userId).run();
+    'INSERT INTO entries (text, image, meal, user_id, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(text || '', image || '', autoMeal, userId, new Date().toISOString()).run();
   return json({ id: result.meta.last_row_id, success: true, meal: autoMeal });
 };
 

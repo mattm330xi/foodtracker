@@ -720,15 +720,16 @@
 </main>
 
 <style>
+  :global(html, body) { overflow-x: hidden; margin: 0; padding: 0; }
   main { max-width: 480px; margin: 0 auto; padding: 16px; position: relative; }
   h1 { margin: 0 0 8px; }
   h2 { margin: 0; font-size: 18px; }
   h3 { margin: 0; }
 
-  header { display: flex; justify-content: space-between; align-items: center; }
+  header { display: flex; flex-direction: column; gap: 8px; }
   .header-left { display: flex; align-items: baseline; gap: 8px; }
   .username { font-size: 12px; color: #888; }
-  .header-btns { display: flex; gap: 4px; }
+  .header-btns { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
   .icon-btn { background: none; border: none; font-size: 20px; padding: 4px 8px; cursor: pointer; border-radius: 8px; text-decoration: none; display: inline-flex; }
   .icon-btn:hover { background: #f0f0f0; }
 

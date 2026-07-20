@@ -24,8 +24,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
   const db = platform!.env.FTD1;
   const userId = locals.userId;
   const result = await db.prepare(
-    'INSERT INTO reactions (symptom, severity, notes, user_id) VALUES (?, ?, ?, ?)'
-  ).bind(symptom, severity || 1, notes || '', userId).run();
+    'INSERT INTO reactions (symptom, severity, notes, user_id, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(symptom, severity || 1, notes || '', userId, new Date().toISOString()).run();
   return json({ id: result.meta.last_row_id, success: true });
 };
 

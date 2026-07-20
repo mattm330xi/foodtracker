@@ -66,7 +66,7 @@ function toAB(input: any): ArrayBuffer {
 }
 
 function setSessionCookie(token: string, userId: number): string {
-  const maxAge = 60 * 60 * 24 * 30;
+  const maxAge = 60 * 60 * 24 * 60;
   return `ft_session=${userId}:${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
@@ -411,7 +411,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
 
       await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId ?? null).run();
       const realToken = generateToken();
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
       await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
         .bind(userId ?? null, realToken ?? null, expiresAt ?? null)
         .run();
@@ -524,7 +524,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
 
       await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId ?? null).run();
       const realToken = generateToken();
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
       await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
         .bind(userId ?? null, realToken ?? null, expiresAt ?? null)
         .run();

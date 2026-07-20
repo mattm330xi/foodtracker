@@ -96,7 +96,7 @@ async function verifyRegistration(credential: any, expectedChallenge: string) {
 }
 
 function setSessionCookie(token: string, userId: number): string {
-  return `ft_session=${userId}:${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`;
+  return `ft_session=${userId}:${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 60}`;
 }
 
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
@@ -173,7 +173,7 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
 
     // Restore real session
     const realToken = bufToBase64url(crypto.getRandomValues(new Uint8Array(32)).buffer);
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
     await db.prepare('DELETE FROM sessions WHERE user_id = ? AND token LIKE ?').bind(userId, 'profreg:%').run();
     await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
       .bind(userId, realToken, expiresAt).run();

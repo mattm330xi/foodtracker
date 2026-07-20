@@ -23,8 +23,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
     await db.prepare('UPDATE entries SET day_notes = ? WHERE id = ? AND user_id = ?')
       .bind(notes, existing.id, userId).run();
   } else {
-    await db.prepare("INSERT INTO entries (text, image, meal, day_notes, user_id) VALUES (?, '', 'Note', ?, ?)")
-      .bind(date, notes, userId).run();
+    await db.prepare("INSERT INTO entries (text, image, meal, day_notes, user_id, created_at) VALUES (?, '', 'Note', ?, ?, ?)")
+      .bind(date, notes, userId, new Date().toISOString()).run();
   }
   return json({ success: true });
 };
