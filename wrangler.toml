@@ -5,6 +5,6 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "FTD1"
 database_name = "foodtrackerd1"
-database_id = "<TO_BE_FILLED>"
+database_id = "63d158c5-e98c-4ef5-904d-3452bcd6711e"
 
 
