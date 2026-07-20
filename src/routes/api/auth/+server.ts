@@ -2,8 +2,14 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 const RP_NAME = 'Food Tracker';
-const RP_ID = 'foodtracker.mattm330xi.workers.dev';
-const ORIGIN = `https://${RP_ID}`;
+
+function getRpId(origin: string): string {
+  return new URL(origin).hostname;
+}
+
+function getOrigin(request: Request): string {
+  return new URL(request.url).origin;
+}
 
 // ─── Utilities ─────────────────────────────────────────────
 
@@ -67,7 +73,7 @@ function toAB(input: any): ArrayBuffer {
 
 function setSessionCookie(token: string, userId: number): string {
   const maxAge = 60 * 60 * 24 * 60;
-  return `ft_session=${userId}:${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+  return `ft_session=${userId}:${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
 // ─── Minimal CBOR parser ───────────────────────────────────
@@ -168,7 +174,7 @@ function parseAttestationObject(attObjBuf: ArrayBuffer) {
 
 // ─── Verify registration ───────────────────────────────────
 
-async function verifyRegistrationResponse(credential: any, expectedChallenge: string) {
+async function verifyRegistrationResponse(credential: any, expectedChallenge: string, expectedOrigin: string) {
   try {
     const clientDataJSON = base64urlToBuf(credential.response.clientDataJSON);
     const attestationObject = base64urlToBuf(credential.response.attestationObject);
@@ -176,7 +182,7 @@ async function verifyRegistrationResponse(credential: any, expectedChallenge: st
 
     if (clientData.type !== 'webauthn.create') return null;
     if (clientData.challenge !== expectedChallenge) return null;
-    if (clientData.origin !== ORIGIN) return null;
+    if (clientData.origin !== expectedOrigin) return null;
 
     const parsed = parseAttestationObject(attestationObject);
     if (!parsed) return null;
@@ -260,6 +266,7 @@ async function verifyAssertionResponse(
   expectedChallenge: string,
   storedCoseKeyBase64: string,
   storedCounter: number,
+  expectedOrigin: string,
 ) {
   try {
     const clientDataJSON = base64urlToBuf(credential.response.clientDataJSON);
@@ -270,7 +277,7 @@ async function verifyAssertionResponse(
 
     if (clientData.type !== 'webauthn.get') return { error: 'bad type' };
     if (clientData.challenge !== expectedChallenge) return { error: 'challenge mismatch' };
-    if (clientData.origin !== ORIGIN) return { error: 'origin mismatch' };
+    if (clientData.origin !== expectedOrigin) return { error: 'origin mismatch' };
 
     const clientDataHash = await crypto.subtle.digest('SHA-256', clientDataJSON);
     const authBuf = toAB(authenticatorData);
@@ -333,6 +340,8 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
   try {
     const { action, ...body } = await request.json();
     const db = platform!.env.FTD1;
+    const rpId = getRpId(getOrigin(request));
+    const origin = `https://${rpId}`;
 
     // ── REGISTER START ──────────────────────────────────────
     if (action === 'register-start') {
@@ -357,7 +366,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
       return json(
         {
           options: {
-            rp: { name: RP_NAME, id: RP_ID },
+            rp: { name: RP_NAME, id: rpId },
             user: {
               id: bufToBase64url(new TextEncoder().encode(String(userId)).buffer),
               name: clean,
@@ -390,7 +399,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
 
       if (!credential) return json({ error: 'Missing credential' }, { status: 400 });
 
-      const verified = await verifyRegistrationResponse(credential, challenge ?? '');
+      const verified = await verifyRegistrationResponse(credential, challenge ?? '', origin);
       if (!verified) return json({ error: 'Verification failed' }, { status: 400 });
 
       const transports = credential.response?.transports ?? [];
@@ -464,7 +473,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
         {
           options: {
             challenge,
-            rpId: RP_ID,
+            rpId: rpId,
             allowCredentials: creds.results.map((c: any) => ({
               id: c.credential_id,
               type: 'public-key',
@@ -512,6 +521,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
         challenge ?? '',
         storedKeyBase64,
         cred.counter ?? 0,
+        origin,
       );
       if (verified.error) {
         return json({ error: 'Signature verification failed', detail: verified.error }, { status: 400 });

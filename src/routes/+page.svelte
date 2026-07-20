@@ -52,6 +52,8 @@
   let barcodeResult: any = $state(null);
   let barcodeLoading = $state(false);
   let barcodeScanner: Html5Qrcode | null = null;
+  let barcodeElapsed = $state(0);
+  let barcodeTimer: ReturnType<typeof setInterval> | null = null;
 
   // Favorites
   let favorites: any[] = $state([]);
@@ -393,14 +395,39 @@
     templates = templates.filter((t: any) => t.id !== id);
   }
 
+  let barcodeBusy = $state(false);
+
   async function lookupBarcode(code: string) {
-    if (!code) return;
+    if (!code || barcodeBusy) return;
+    barcodeBusy = true;
     barcodeLoading = true;
     barcodeResult = null;
+    barcodeElapsed = 0;
     stopBarcodeScanner();
-    const res = await fetch(`/api/barcode?barcode=${code}`);
-    barcodeResult = await res.json();
-    barcodeLoading = false;
+
+    barcodeTimer = setInterval(() => { barcodeElapsed += 1; }, 1000);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const res = await fetch(`/api/barcode?barcode=${code}`, { signal: controller.signal });
+      const data = await res.json();
+      clearTimeout(timeout);
+      if (data.error) {
+        barcodeResult = { found: false, error: data.error };
+      } else {
+        barcodeResult = data;
+      }
+    } catch (e: any) {
+      clearTimeout(timeout);
+      const msg = e?.name === 'AbortError' ? 'Lookup timed out after 30s' : 'Network error';
+      barcodeResult = { found: false, error: msg };
+    } finally {
+      if (barcodeTimer) { clearInterval(barcodeTimer); barcodeTimer = null; }
+      barcodeLoading = false;
+      barcodeBusy = false;
+    }
   }
 
   function addBarcodeAsEntry() {
@@ -417,6 +444,7 @@
   }
 
   function stopBarcodeScanner() {
+    if (barcodeTimer) { clearInterval(barcodeTimer); barcodeTimer = null; }
     if (barcodeScanner) {
       barcodeScanner.stop().catch(() => {});
       barcodeScanner.clear();
@@ -574,7 +602,7 @@
       <h3>Scan Barcode</h3>
       <div id="barcode-reader" class="barcode-reader"></div>
       {#if barcodeLoading}
-        <p class="not-found">Looking up product...</p>
+        <p class="not-found">Looking up product... ({barcodeElapsed}s)</p>
       {:else if barcodeResult?.found}
         <div class="barcode-result">
           <strong>{barcodeResult.name}</strong>
@@ -585,7 +613,11 @@
           <button class="submit" onclick={addBarcodeAsEntry}>Add to notes</button>
         </div>
       {:else if barcodeResult && !barcodeResult.found}
-        <p class="not-found">Product not found. Try scanning again.</p>
+        {#if barcodeResult.error}
+          <p class="not-found" style="color:#c00">{barcodeResult.error}</p>
+        {:else}
+          <p class="not-found">Product not found. Try scanning again.</p>
+        {/if}
       {/if}
     </div>
   {/if}

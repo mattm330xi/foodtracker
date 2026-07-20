@@ -2,8 +2,14 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 const RP_NAME = 'Food Tracker';
-const RP_ID = 'foodtracker.mattm330xi.workers.dev';
-const ORIGIN = `https://${RP_ID}`;
+
+function getRpId(origin: string): string {
+  return new URL(origin).hostname;
+}
+
+function getOrigin(request: Request): string {
+  return new URL(request.url).origin;
+}
 
 function generateChallenge(): string {
   const bytes = new Uint8Array(32);
@@ -85,18 +91,18 @@ function parseAttestationObject(buf: ArrayBuffer) {
   return null;
 }
 
-async function verifyRegistration(credential: any, expectedChallenge: string) {
+async function verifyRegistration(credential: any, expectedChallenge: string, expectedOrigin: string) {
   try {
     const clientDataJSON = base64urlToBuf(credential.response.clientDataJSON);
     const attestationObject = base64urlToBuf(credential.response.attestationObject);
     const clientData = JSON.parse(new TextDecoder().decode(clientDataJSON));
-    if (clientData.type !== 'webauthn.create' || clientData.challenge !== expectedChallenge || clientData.origin !== ORIGIN) return null;
+    if (clientData.type !== 'webauthn.create' || clientData.challenge !== expectedChallenge || clientData.origin !== expectedOrigin) return null;
     return parseAttestationObject(attestationObject);
   } catch { return null; }
 }
 
 function setSessionCookie(token: string, userId: number): string {
-  return `ft_session=${userId}:${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 60}`;
+  return `ft_session=${userId}:${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${60 * 60 * 24 * 60}`;
 }
 
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
@@ -118,6 +124,8 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
   const { action, ...body } = await request.json();
   const db = platform!.env.FTD1;
   const userId = locals.userId;
+  const rpId = getRpId(getOrigin(request));
+  const origin = `https://${rpId}`;
 
   // ── TIMEZONE ─────────────────────────────────────────────
   if (body.timezone) {
@@ -140,7 +148,7 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
 
     return json({
       options: {
-        rp: { name: RP_NAME, id: RP_ID },
+        rp: { name: RP_NAME, id: rpId },
         user: {
           id: bufToBase64url(new TextEncoder().encode(String(userId)).buffer),
           name: user.username,
@@ -164,7 +172,7 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
     if (!cookie?.startsWith('profreg:')) return json({ error: 'No registration session' }, { status: 401 });
     const [, challenge] = cookie.split(':');
 
-    const verified = await verifyRegistration(body.credential, challenge);
+    const verified = await verifyRegistration(body.credential, challenge, origin);
     if (!verified) return json({ error: 'Verification failed' }, { status: 400 });
 
     await db.prepare(
