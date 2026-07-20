@@ -11,10 +11,6 @@
   onMount(async () => {
     const res = await fetch('/api/entries');
     entries = await res.json();
-
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(console.error);
-    }
   });
 
   function compressImage(file: File): Promise<string> {
