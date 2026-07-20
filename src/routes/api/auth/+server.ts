@@ -35,9 +35,34 @@ function base64urlToBuf(str: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-function toAB(input: ArrayBuffer | Uint8Array): ArrayBuffer {
+function toAB(input: any): ArrayBuffer {
   if (input instanceof ArrayBuffer) return input;
-  return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+  if (ArrayBuffer.isView(input)) {
+    const v = input as ArrayBufferView;
+    return v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength);
+  }
+  if (input?.buffer) {
+    const b = input.buffer;
+    if (b instanceof ArrayBuffer || b?.constructor?.name === 'ArrayBuffer') {
+      return b.slice(input.byteOffset ?? 0, (input.byteOffset ?? 0) + (input.byteLength ?? b.byteLength));
+    }
+  }
+  if (typeof input === 'string') {
+    const hexMatch = /^[0-9a-fA-F]*$/.test(input) && input.length % 2 === 0;
+    if (hexMatch) {
+      const bytes = new Uint8Array(input.length / 2);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(input.substr(i * 2, 2), 16);
+      return bytes.buffer;
+    }
+    const padded = input.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4));
+    const binary = atob(padded + pad);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+  if (Array.isArray(input)) return new Uint8Array(input).buffer;
+  throw new Error(`Cannot convert ${typeof input} (${input?.constructor?.name}) to ArrayBuffer`);
 }
 
 function setSessionCookie(token: string, userId: number): string {
@@ -356,10 +381,11 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
     // ── REGISTER FINISH ─────────────────────────────────────
     if (action === 'register-finish') {
       const cookie = cookies.get('ft_session');
-      if (!cookie?.startsWith('reg:')) return json({ error: 'No registration session' }, { status: 401 });
+      const parts = cookie?.split(':');
+      if (!parts || parts.length < 4 || parts[1] !== 'reg') return json({ error: 'No registration session' }, { status: 401 });
 
-      const [, challenge, userIdStr] = cookie.split(':');
-      const userId = parseInt(userIdStr ?? '0');
+      const userId = parseInt(parts[0] ?? '0');
+      const challenge = parts[2];
       const { credential } = body;
 
       if (!credential) return json({ error: 'Missing credential' }, { status: 400 });
@@ -434,29 +460,33 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
         .bind(user.id ?? null, sessionToken ?? null, expiresAt ?? null)
         .run();
 
-      return json({
-        options: {
-          challenge,
-          rpId: RP_ID,
-          allowCredentials: creds.results.map((c: any) => ({
-            id: c.credential_id,
-            type: 'public-key',
-            transports: c.transports ? c.transports.split(',') : ['internal'],
-          })),
-          userVerification: 'required',
-          timeout: 60000,
+      return json(
+        {
+          options: {
+            challenge,
+            rpId: RP_ID,
+            allowCredentials: creds.results.map((c: any) => ({
+              id: c.credential_id,
+              type: 'public-key',
+              transports: c.transports ? c.transports.split(',') : ['internal'],
+            })),
+            userVerification: 'required',
+            timeout: 60000,
+          },
+          userId: user.id,
         },
-        userId: user.id,
-      });
+        { headers: { 'Set-Cookie': setSessionCookie(sessionToken, user.id) } },
+      );
     }
 
     // ── LOGIN FINISH ────────────────────────────────────────
     if (action === 'login-finish') {
       const cookie = cookies.get('ft_session');
-      if (!cookie?.startsWith('auth:')) return json({ error: 'No auth session' }, { status: 401 });
+      const parts = cookie?.split(':');
+      if (!parts || parts.length < 4 || parts[1] !== 'auth') return json({ error: 'No auth session' }, { status: 401 });
 
-      const [, challenge, userIdStr] = cookie.split(':');
-      const userId = parseInt(userIdStr ?? '0');
+      const userId = parseInt(parts[0] ?? '0');
+      const challenge = parts[2];
       const { credential } = body;
 
       if (!credential) return json({ error: 'Missing credential' }, { status: 400 });
@@ -471,7 +501,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
       let storedKeyBase64: string;
       if (typeof cred.public_key === 'string') {
         storedKeyBase64 = cred.public_key;
-      } else if (cred.public_key instanceof Uint8Array || cred.public_key instanceof ArrayBuffer) {
+      } else if (cred.public_key) {
         storedKeyBase64 = bufToBase64url(toAB(cred.public_key));
       } else {
         return json({ error: 'Stored key has unexpected type' }, { status: 500 });

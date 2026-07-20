@@ -21,9 +21,34 @@ function base64urlToBuf(str: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-function toAB(input: ArrayBuffer | Uint8Array): ArrayBuffer {
+function toAB(input: any): ArrayBuffer {
   if (input instanceof ArrayBuffer) return input;
-  return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+  if (ArrayBuffer.isView(input)) {
+    const v = input as ArrayBufferView;
+    return v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength);
+  }
+  if (input?.buffer) {
+    const b = input.buffer;
+    if (b instanceof ArrayBuffer || b?.constructor?.name === 'ArrayBuffer') {
+      return b.slice(input.byteOffset ?? 0, (input.byteOffset ?? 0) + (input.byteLength ?? b.byteLength));
+    }
+  }
+  if (typeof input === 'string') {
+    const hexMatch = /^[0-9a-fA-F]*$/.test(input) && input.length % 2 === 0;
+    if (hexMatch) {
+      const bytes = new Uint8Array(input.length / 2);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(input.substr(i * 2, 2), 16);
+      return bytes.buffer;
+    }
+    const padded = input.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4));
+    const binary = atob(padded + pad);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+  if (Array.isArray(input)) return new Uint8Array(input).buffer;
+  throw new Error(`Cannot convert ${typeof input} (${input?.constructor?.name}) to ArrayBuffer`);
 }
 
 // ─── CBOR parser ───────────────────────────────────────────
