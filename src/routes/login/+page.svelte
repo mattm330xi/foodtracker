@@ -65,10 +65,7 @@
         response: {
           clientDataJSON: bufToBase64url(response.clientDataJSON),
           attestationObject: bufToBase64url(response.attestationObject),
-          getAuthenticatorData: () => bufToBase64url(response.getAuthenticatorData()),
-          getPublicKey: () => response.getPublicKey() ? bufToBase64url(response.getPublicKey()!) : null,
-          getPublicKeyAlgorithm: () => response.getPublicKeyAlgorithm(),
-          getTransports: () => response.getTransports(),
+          transports: response.getTransports?.() ?? [],
         },
       };
 
@@ -139,7 +136,6 @@
           action: 'login-finish',
           credential: body,
           userId: startData.userId,
-          challenge: startData._debug.challenge,
         }),
       });
       const finishData = await finishRes.json();

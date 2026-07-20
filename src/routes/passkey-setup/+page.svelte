@@ -1,5 +1,5 @@
 <script lang="ts">
-  let username = $state('mattm330xi@gmail.com');
+  let username = $state('');
   let loading = $state(false);
   let error = $state('');
   let success = $state('');
@@ -36,18 +36,15 @@
       if (optData.error) { error = optData.error; loading = false; return; }
       addLog('Got options, prompting device...');
 
-      const challengeBuf = base64urlToBuf(optData.options.challenge);
-      const userIdBuf = base64urlToBuf(optData.options.user.id);
-
       const createOptions: CredentialCreationOptions = {
         publicKey: {
           rp: optData.options.rp,
           user: {
-            id: userIdBuf,
+            id: base64urlToBuf(optData.options.user.id),
             name: optData.options.user.name,
             displayName: optData.options.user.displayName,
           },
-          challenge: challengeBuf,
+          challenge: base64urlToBuf(optData.options.challenge),
           pubKeyCredParams: optData.options.pubKeyCredParams,
           authenticatorSelection: optData.options.authenticatorSelection,
           timeout: optData.options.timeout,
@@ -60,6 +57,7 @@
 
       const raw = credential.rawId;
       const response = credential.response as AuthenticatorAttestationResponse;
+      const pk = response.getPublicKey ? response.getPublicKey() : null;
 
       const body = {
         id: credential.id,
@@ -68,10 +66,8 @@
         response: {
           clientDataJSON: bufToBase64url(response.clientDataJSON),
           attestationObject: bufToBase64url(response.attestationObject),
-          getAuthenticatorData: () => bufToBase64url(response.getAuthenticatorData()),
-          getPublicKey: () => response.getPublicKey() ? bufToBase64url(response.getPublicKey()!) : null,
-          getPublicKeyAlgorithm: () => response.getPublicKeyAlgorithm(),
-          getTransports: () => response.getTransports(),
+          publicKey: pk ? bufToBase64url(pk) : null,
+          transports: response.getTransports ? response.getTransports() : [],
         },
       };
 
