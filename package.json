@@ -9,7 +9,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "cf:dev": "wrangler pages dev .svelte-kit/cloudflare --d1 FTD1=foodtrackerd1",
-    "cf:deploy": "wrangler pages deploy .svelte-kit/cloudflare --project-name=foodtracker"
+    "cf:deploy": "wrangler deploy"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.0.0",
