@@ -352,6 +352,9 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
       const existing = await db.prepare('SELECT id FROM users WHERE username = ?').bind(clean).first();
       if (existing) return json({ error: 'Username already taken' }, { status: 409 });
 
+      const existing = await db.prepare('SELECT id FROM users WHERE username = ?').bind(clean).first();
+      if (existing) return json({ error: 'Username already taken' }, { status: 409 });
+
       const result = await db.prepare('INSERT INTO users (username) VALUES (?)').bind(clean).run();
       const userId = result.meta.last_row_id as number;
       const challenge = generateChallenge();
