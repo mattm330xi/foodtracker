@@ -77,8 +77,8 @@ class CborReader {
 
 function parseAttestationObject(buf: ArrayBuffer) {
   const map = new CborReader(buf).readMap();
-  const authData = new Uint8Array(map.get('authData') || map.get(2));
-  const view = new DataView(authData.buffer, authData.byteOffset, authData.byteLength);
+  const authData = new Uint8Array(map.get(2) as ArrayBuffer);
+  const view = new DataView(authData.buffer as ArrayBuffer, authData.byteOffset, authData.byteLength);
   let offset = 36; // skip rpIdHash(32) + flags(1) + signCount(4)
   const flags = view.getUint8(32);
   if (flags & 0x40) { // AT flag set

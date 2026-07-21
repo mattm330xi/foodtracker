@@ -1,6 +1,18 @@
 // See https://kit.svelte.dev/docs/types#app
 // for information about these interfaces
 declare global {
+  interface BarcodeDetectorResult {
+    rawValue: string;
+    format: string;
+    cornerPoints: Array<{ x: number; y: number }>;
+  }
+
+  class BarcodeDetector {
+    constructor(options?: { formats?: string[] });
+    detect(image: ImageBitmapSource): Promise<BarcodeDetectorResult[]>;
+    static getSupportedFormats(): Promise<string[]>;
+  }
+
   namespace App {
     interface Locals {
       userId: number;

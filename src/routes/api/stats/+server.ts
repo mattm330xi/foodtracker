@@ -8,15 +8,15 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 
   const since = new Date();
   since.setDate(since.getDate() - days);
-  const sinceStr = since.toISOString().slice(0, 10);
+  const sinceIso = since.toISOString();
 
   const foods = await db.prepare(
-    "SELECT text, date(created_at) as date FROM entries WHERE user_id = ? AND text != '' AND date(created_at) >= ? ORDER BY created_at DESC"
-  ).bind(userId, sinceStr).all();
+    "SELECT text, substr(created_at, 1, 10) as date FROM entries WHERE user_id = ? AND text != '' AND created_at >= ? ORDER BY created_at DESC"
+  ).bind(userId, sinceIso).all();
 
   const reacts = await db.prepare(
-    "SELECT symptom, severity, notes, date(created_at) as date FROM reactions WHERE user_id = ? AND date(created_at) >= ? ORDER BY created_at DESC"
-  ).bind(userId, sinceStr).all();
+    "SELECT symptom, severity, notes, substr(created_at, 1, 10) as date FROM reactions WHERE user_id = ? AND created_at >= ? ORDER BY created_at DESC"
+  ).bind(userId, sinceIso).all();
 
   const reactionDates = new Set(reacts.results.map((r: any) => r.date));
 

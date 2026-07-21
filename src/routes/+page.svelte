@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
 
   interface Entry {
     id: number;
@@ -8,6 +8,7 @@
     meal: string;
     created_at: string;
     day_notes: string;
+    barcode_data: string | null;
   }
 
   interface Reaction {
@@ -47,13 +48,17 @@
   let reactionNotes = $state('');
 
   // Barcode
-  import { Html5Qrcode } from 'html5-qrcode';
+  import BarcodeScanner from '$lib/BarcodeScanner.svelte';
   let showBarcode = $state(false);
-  let barcodeResult: any = $state(null);
-  let barcodeLoading = $state(false);
-  let barcodeScanner: Html5Qrcode | null = null;
+  let scannedProduct: any = $state(null);
+  let scannerStatus: 'idle' | 'scanning' | 'looking_up' | 'success' | 'error' = $state('idle');
+  let errorMessage = $state('');
   let barcodeElapsed = $state(0);
   let barcodeTimer: ReturnType<typeof setInterval> | null = null;
+  let isBusy = false;
+  let scannerComponent: any = $state(null);
+  let manualBarcode = $state('');
+  const BARCODE_TIMEOUT_MS = 5000;
 
   // Favorites
   let favorites: any[] = $state([]);
@@ -162,10 +167,16 @@
 
   $effect(() => {
     if (showBarcode) {
-      tick().then(() => startBarcodeScanner());
-    } else {
-      stopBarcodeScanner();
+      scannedProduct = null;
+      scannerStatus = 'idle';
+      errorMessage = '';
+      tick().then(() => scannerComponent?.startScanner());
+      return () => { scannerComponent?.stopScanner(); };
     }
+  });
+
+  onDestroy(() => {
+    if (barcodeTimer) { clearInterval(barcodeTimer); barcodeTimer = null; }
   });
 
   function selectDate(date: string) {
@@ -256,20 +267,16 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, image: imageBase64 })
     });
+    if (!res.ok) {
+      alert('Failed to save entry. The photo may be too large. Please try a smaller image.');
+      return;
+    }
     const { id, meal } = await res.json();
-    entries = [...entries, { id, text, image: imageBase64, meal, created_at: new Date().toISOString(), day_notes: '' }];
+    entries = [...entries, { id, text, image: imageBase64, meal, created_at: new Date().toISOString(), day_notes: '', barcode_data: null }];
     text = '';
     imageBase64 = '';
   }
 
-  async function updateEntry(id: number, field: string, value: string) {
-    await fetch('/api/entries', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, [field]: value })
-    });
-    entries = entries.map(e => e.id === id ? { ...e, [field]: value } : e);
-  }
 
   function startEditEntry(entry: Entry) {
     editingEntry = entry.id;
@@ -280,22 +287,21 @@
     editTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   }
 
-  function saveEditEntry(entry: Entry) {
-    const [h, m] = editTime.split(':');
-    // Create a date in the user's timezone and convert to UTC
+  async function saveEditEntry(entry: Entry) {
     const d = new Date(entry.created_at);
     const localStr = d.toLocaleDateString('en-CA', { timeZone: timezone });
     const tzDate = new Date(`${localStr}T${editTime}:00`);
-    // Get the offset for this timezone
-    const utcStr = tzDate.toLocaleString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: 'numeric', hour12: false });
-    const localStr2 = tzDate.toLocaleString('en-US', { timeZone: timezone, hour: 'numeric', minute: 'numeric', hour12: false });
-    const [utcH, utcM] = utcStr.split(':').map(Number);
-    const [localH, localM] = localStr2.split(':').map(Number);
-    const diffMinutes = (localH * 60 + localM) - (utcH * 60 + utcM);
-    const utcDate = new Date(tzDate.getTime() - diffMinutes * 60 * 1000);
-    const newIso = utcDate.toISOString();
-    updateEntry(entry.id, 'meal', editMeal);
-    updateEntry(entry.id, 'created_at', newIso);
+    const newIso = tzDate.toISOString();
+    const res = await fetch('/api/entries', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: entry.id, meal: editMeal, created_at: newIso })
+    });
+    if (!res.ok) {
+      alert('Failed to save changes. Please try again.');
+      return;
+    }
+    entries = entries.map(e => e.id === entry.id ? { ...e, meal: editMeal, created_at: newIso } : e);
     editingEntry = null;
   }
 
@@ -395,83 +401,89 @@
     templates = templates.filter((t: any) => t.id !== id);
   }
 
-  let barcodeBusy = $state(false);
+  async function handleBarcodeDetected(code: string) {
+    console.debug(`[Parent] handleBarcodeDetected: "${code}" busy=${isBusy}`);
+    if (isBusy) return;
+    isBusy = true;
+    scannerStatus = 'looking_up';
 
-  async function lookupBarcode(code: string) {
-    if (!code || barcodeBusy) return;
-    barcodeBusy = true;
-    barcodeLoading = true;
-    barcodeResult = null;
     barcodeElapsed = 0;
-    stopBarcodeScanner();
-
     barcodeTimer = setInterval(() => { barcodeElapsed += 1; }, 1000);
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), BARCODE_TIMEOUT_MS);
+    const t0 = performance.now();
 
     try {
-      const res = await fetch(`/api/barcode?barcode=${code}`, { signal: controller.signal });
-      const data = await res.json();
-      clearTimeout(timeout);
-      if (data.error) {
-        barcodeResult = { found: false, error: data.error };
-      } else {
-        barcodeResult = data;
+      console.debug('[Parent] fetching /api/barcode...');
+      const res = await fetch(`/api/barcode?barcode=${encodeURIComponent(code)}`, {
+        signal: controller.signal
+      });
+      console.debug(`[Parent] response: ${res.status} in ${(performance.now() - t0).toFixed(0)}ms`);
+
+      if (!res.ok) {
+        if (res.status === 404) throw new Error('Product not found in database.');
+        throw new Error(`Server returned HTTP ${res.status}`);
       }
+
+      const data = await res.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      if (data.found === false) {
+        throw new Error('Product not found in database.');
+      }
+
+      scannedProduct = data;
+      scannerStatus = 'success';
+      console.debug('[Parent] lookup success');
+      scannerComponent?.stopScanner();
     } catch (e: any) {
-      clearTimeout(timeout);
-      const msg = e?.name === 'AbortError' ? 'Lookup timed out after 30s' : 'Network error';
-      barcodeResult = { found: false, error: msg };
+      if (e.name === 'AbortError') {
+        errorMessage = 'Product lookup timed out (5s). Please try again.';
+      } else {
+        errorMessage = e.message || 'Failed to look up product.';
+      }
+      scannerStatus = 'error';
     } finally {
+      clearTimeout(timeoutId);
       if (barcodeTimer) { clearInterval(barcodeTimer); barcodeTimer = null; }
-      barcodeLoading = false;
-      barcodeBusy = false;
+      barcodeElapsed = 0;
+      isBusy = false;
+      console.debug('[Parent] isBusy released');
     }
   }
 
-  function addBarcodeAsEntry() {
-    if (!barcodeResult) return;
-    const notes = [
-      barcodeResult.name,
-      barcodeResult.brand ? `Brand: ${barcodeResult.brand}` : '',
-      barcodeResult.ingredients ? `Ingredients: ${barcodeResult.ingredients}` : '',
-      barcodeResult.allergens?.length ? `Allergens: ${barcodeResult.allergens.join(', ')}` : ''
-    ].filter(Boolean).join('\n');
-    text = notes;
+  async function addBarcodeAsEntry() {
+    if (!scannedProduct) return;
+    text = scannedProduct.name || '';
+    imageBase64 = '';
+    const barcodeData = JSON.stringify({
+      name: scannedProduct.name,
+      brand: scannedProduct.brand || '',
+      ingredients: scannedProduct.ingredients || '',
+      allergens: scannedProduct.allergens || [],
+      image: scannedProduct.image || '',
+      barcode: scannedProduct.barcode || '',
+      warnings: scannedProduct.warnings || [],
+    });
+
+    const res = await fetch('/api/entries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, image: '', barcode_data: barcodeData })
+    });
+    if (!res.ok) {
+      alert('Failed to save entry.');
+      return;
+    }
+    const { id, meal } = await res.json();
+    entries = [...entries, { id, text, image: '', meal, created_at: new Date().toISOString(), day_notes: '', barcode_data: barcodeData }];
+    text = '';
     showBarcode = false;
-    barcodeResult = null;
-  }
-
-  function stopBarcodeScanner() {
-    if (barcodeTimer) { clearInterval(barcodeTimer); barcodeTimer = null; }
-    if (barcodeScanner) {
-      barcodeScanner.stop().catch(() => {});
-      barcodeScanner.clear();
-      barcodeScanner = null;
-    }
-  }
-
-  async function startBarcodeScanner() {
-    barcodeResult = null;
-    barcodeLoading = false;
-    await tick();
-    const el = document.getElementById('barcode-reader');
-    if (!el) return;
-    barcodeScanner = new Html5Qrcode('barcode-reader');
-    try {
-      await barcodeScanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 150 } },
-        (decodedText) => {
-          lookupBarcode(decodedText);
-        },
-        () => {}
-      );
-    } catch (e: any) {
-      console.error('Camera error:', e);
-      barcodeResult = { found: false, error: e?.message || 'Camera access denied' };
-    }
+    scannedProduct = null;
+    manualBarcode = '';
   }
 
   function timeOnly(iso: string) {
@@ -597,27 +609,48 @@
   {/if}
 
   {#if showBarcode}
-    <div class="modal-overlay" onclick={() => { showBarcode = false; stopBarcodeScanner(); barcodeResult = null; }}></div>
+    <div class="modal-overlay" onclick={() => { showBarcode = false; }}></div>
     <div class="modal barcode-modal">
       <h3>Scan Barcode</h3>
-      <div id="barcode-reader" class="barcode-reader"></div>
-      {#if barcodeLoading}
+      <BarcodeScanner bind:this={scannerComponent} onBarcode={handleBarcodeDetected} />
+      <div class="manual-barcode-row">
+        <input
+          bind:value={manualBarcode}
+          placeholder="Or type barcode number"
+          type="text"
+          inputmode="numeric"
+          class="manual-barcode-input"
+          onkeydown={(e) => { if (e.key === 'Enter' && manualBarcode.trim()) handleBarcodeDetected(manualBarcode.trim()); }}
+        />
+        <button
+          class="manual-barcode-btn"
+          disabled={!manualBarcode.trim() || isBusy}
+          onclick={() => handleBarcodeDetected(manualBarcode.trim())}
+        >Look Up</button>
+      </div>
+      {#if scannerStatus === 'looking_up'}
         <p class="not-found">Looking up product... ({barcodeElapsed}s)</p>
-      {:else if barcodeResult?.found}
+      {:else if scannerStatus === 'success' && scannedProduct}
         <div class="barcode-result">
-          <strong>{barcodeResult.name}</strong>
-          {#if barcodeResult.brand}<p>{barcodeResult.brand}</p>{/if}
-          {#if barcodeResult.allergens?.length}
-            <p class="allergens">Allergens: {barcodeResult.allergens.join(', ')}</p>
+          {#if scannedProduct.image}
+            <img src={scannedProduct.image} alt={scannedProduct.name} class="barcode-product-img" />
+          {/if}
+          <strong>{scannedProduct.name}</strong>
+          {#if scannedProduct.brand}<p>{scannedProduct.brand}</p>{/if}
+          {#if scannedProduct.warnings?.length}
+            <div class="allergen-warning-banner">
+              ⚠️ Contains: {scannedProduct.warnings.join(', ')}
+            </div>
+          {/if}
+          {#if scannedProduct.allergens?.length}
+            <p class="allergens">Allergens: {scannedProduct.allergens.join(', ')}</p>
           {/if}
           <button class="submit" onclick={addBarcodeAsEntry}>Add to notes</button>
         </div>
-      {:else if barcodeResult && !barcodeResult.found}
-        {#if barcodeResult.error}
-          <p class="not-found" style="color:#c00">{barcodeResult.error}</p>
-        {:else}
-          <p class="not-found">Product not found. Try scanning again.</p>
-        {/if}
+      {:else if scannerStatus === 'error'}
+        <p class="not-found" style="color:#c00">{errorMessage}</p>
+        <button class="submit" style="margin-top:8px" onclick={() => { scannerComponent?.startScanner(); scannerStatus = 'idle'; }}>Try Again</button>
+        <button class="submit" style="margin-top:8px" onclick={() => { text = `Scanned barcode: (unknown product)`; showBarcode = false; }}>Manual Entry</button>
       {/if}
     </div>
   {/if}
@@ -725,7 +758,8 @@
           <div class="no-entries">No entries</div>
         {/if}
         {#each mealEntries as entry (entry.id)}
-          <div class="entry">
+          {@const entryBd = entry.barcode_data ? JSON.parse(entry.barcode_data) : null}
+          <div class="entry" class:entry-warning={entryBd?.warnings?.length}>
             <div class="entry-header">
               <div class="entry-time">{timeOnly(entry.created_at)}</div>
               <div class="entry-actions">
@@ -752,6 +786,27 @@
 
             {#if entry.image}
               <img src={entry.image} alt="Food" class="entry-img" />
+            {/if}
+            {#if entry.barcode_data}
+              {@const bd = JSON.parse(entry.barcode_data)}
+              {#if bd.warnings?.length}
+                <div class="entry-allergen-warning">⚠️ Contains: {bd.warnings.join(', ')}</div>
+              {/if}
+              {#if bd.image}
+                <img src={bd.image} alt={bd.name || 'Product'} class="entry-img" />
+              {/if}
+              {#if bd.brand}
+                <p class="entry-text" style="color:#666;font-size:12px;margin-bottom:2px">{bd.brand}</p>
+              {/if}
+              {#if bd.allergens?.length}
+                <p class="entry-text" style="color:#c00;font-weight:600;font-size:12px;margin-bottom:2px">Allergens: {bd.allergens.join(', ')}</p>
+              {/if}
+              {#if bd.ingredients}
+                <details class="ingredients-details">
+                  <summary>Ingredients</summary>
+                  <p class="entry-text" style="font-size:12px;color:#555;margin:4px 0 0">{bd.ingredients}</p>
+                </details>
+              {/if}
             {/if}
             {#if entry.text}
               <p class="entry-text">{entry.text}</p>
@@ -822,6 +877,7 @@
   .no-entries { color: #ccc; font-size: 13px; padding: 4px 0; }
 
   .entry { border: 1px solid #eee; border-radius: 12px; padding: 10px; margin-bottom: 8px; background: #fafafa; }
+  .entry.entry-warning { border-color: #ffcc80; background: #fff8e1; }
   .entry.reaction { border-color: #ffcdd2; background: #fff5f5; }
   .entry-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
   .entry-time { font-size: 12px; color: #888; }
@@ -832,6 +888,19 @@
   .meal-badge { font-size: 11px; color: #4CAF50; background: #e8f5e9; padding: 1px 6px; border-radius: 4px; }
   .entry-img { width: 100%; border-radius: 8px; margin: 6px 0; }
   .entry-text { margin: 4px 0 0; line-height: 1.4; font-size: 14px; white-space: pre-wrap; }
+  .ingredients-details { margin: 4px 0 0; font-size: 12px; }
+  .ingredients-details summary { cursor: pointer; color: #888; font-size: 11px; }
+  .ingredients-details summary:hover { color: #4CAF50; }
+  .allergen-warning-banner {
+    background: #fff3e0; border: 1px solid #ffe0b2; color: #e65100;
+    padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    margin: 6px 0;
+  }
+  .entry-allergen-warning {
+    background: #fff3e0; border: 1px solid #ffe0b2; color: #e65100;
+    padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    margin-bottom: 4px;
+  }
 
   .edit-row { display: flex; gap: 4px; margin: 6px 0; align-items: center; }
   .edit-row select, .edit-row input { margin: 0; padding: 4px 6px; font-size: 13px; border: 1px solid #ccc; border-radius: 6px; }
@@ -870,6 +939,14 @@
   .barcode-reader { width: 100%; margin-bottom: 12px; }
   .barcode-reader :global(video) { border-radius: 8px; }
   .barcode-result { margin-top: 12px; padding: 10px; background: #f5f5f5; border-radius: 8px; }
+  .manual-barcode-row { display: flex; gap: 6px; margin-top: 10px; }
+  .manual-barcode-input { flex: 1; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; }
+  .manual-barcode-btn {
+    padding: 8px 12px; background: #333; color: #fff; border: none; border-radius: 8px;
+    font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .manual-barcode-btn:disabled { opacity: 0.4; cursor: default; }
+  .barcode-product-img { width: 100%; max-height: 160px; object-fit: contain; border-radius: 8px; margin-bottom: 8px; }
   .barcode-result .submit { margin-top: 8px; }
   .allergens { color: #c00; font-weight: 600; }
   .not-found { color: #888; text-align: center; }

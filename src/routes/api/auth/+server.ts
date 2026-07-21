@@ -45,7 +45,7 @@ function toAB(input: any): ArrayBuffer {
   if (input instanceof ArrayBuffer) return input;
   if (ArrayBuffer.isView(input)) {
     const v = input as ArrayBufferView;
-    return v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength);
+    return (v.buffer as ArrayBuffer).slice(v.byteOffset, v.byteOffset + v.byteLength);
   }
   if (input?.buffer) {
     const b = input.buffer;
@@ -291,8 +291,8 @@ async function verifyAssertionResponse(
     let valid = await crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' },
       key,
-      signature,
-      signedData,
+      signature as BufferSource,
+      signedData as BufferSource,
     );
 
     if (!valid) {
@@ -301,8 +301,8 @@ async function verifyAssertionResponse(
         valid = await crypto.subtle.verify(
           { name: 'ECDSA', hash: 'SHA-256' },
           key,
-          p1363,
-          signedData,
+          p1363 as BufferSource,
+          signedData as BufferSource,
         );
       }
     }

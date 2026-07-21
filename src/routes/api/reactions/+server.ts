@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { dateRange } from '$lib/dateRange';
 
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
   const db = platform!.env.FTD1;
@@ -7,9 +8,10 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
   const date = url.searchParams.get('date');
 
   if (date) {
+    const { start, end } = dateRange(date);
     const { results } = await db.prepare(
-      "SELECT * FROM reactions WHERE user_id = ? AND date(created_at) = ? ORDER BY created_at ASC"
-    ).bind(userId, date).all();
+      "SELECT * FROM reactions WHERE user_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at ASC"
+    ).bind(userId, start, end).all();
     return json(results);
   }
 

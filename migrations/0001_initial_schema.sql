@@ -5,4 +5,4 @@ CREATE TABLE IF NOT EXISTS entries (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_entries_created_at ON entries(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entries_created_at ON entries(created_at DESC);

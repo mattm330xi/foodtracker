@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { dateRange } from '$lib/dateRange';
 
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
   const db = platform!.env.FTD1;
@@ -7,9 +8,10 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
   const date = url.searchParams.get('date');
 
   if (date) {
+    const { start, end } = dateRange(date);
     const { results } = await db.prepare(
-      "SELECT * FROM entries WHERE user_id = ? AND date(created_at) = ? ORDER BY created_at ASC"
-    ).bind(userId, date).all();
+      "SELECT * FROM entries WHERE user_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at ASC"
+    ).bind(userId, start, end).all();
     return json(results);
   }
 
@@ -20,7 +22,7 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 };
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
-  const { text, image, meal } = await request.json();
+  const { text, image, meal, barcode_data } = await request.json();
   const db = platform!.env.FTD1;
   const userId = locals.userId;
 
@@ -35,8 +37,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
   }
 
   const result = await db.prepare(
-    'INSERT INTO entries (text, image, meal, user_id, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).bind(text || '', image || '', autoMeal, userId, new Date().toISOString()).run();
+    'INSERT INTO entries (text, image, meal, user_id, created_at, barcode_data) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(text || '', image || '', autoMeal, userId, new Date().toISOString(), barcode_data || null).run();
   return json({ id: result.meta.last_row_id, success: true, meal: autoMeal });
 };
 

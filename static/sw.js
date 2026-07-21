@@ -1,4 +1,4 @@
-const CACHE_NAME = 'foodtracker-v4';
+const CACHE_NAME = 'foodtracker-v5';
 const OFFLINE_URLS = ['/'];
 
 self.addEventListener('install', (event) => {
