@@ -46,6 +46,7 @@
   let reactionSymptom = $state('');
   let reactionSeverity = $state(1);
   let reactionNotes = $state('');
+  let reactionError = $state('');
 
   // Barcode
   import BarcodeScanner from '$lib/BarcodeScanner.svelte';
@@ -317,18 +318,27 @@
   }
 
   async function addReaction() {
-    if (!reactionSymptom) return;
-    const res = await fetch('/api/reactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ symptom: reactionSymptom, severity: reactionSeverity, notes: reactionNotes })
-    });
-    const { id } = await res.json();
-    reactions = [...reactions, { id, symptom: reactionSymptom, severity: reactionSeverity, notes: reactionNotes, created_at: new Date().toISOString() }];
-    reactionSymptom = '';
-    reactionSeverity = 1;
-    reactionNotes = '';
-    showReactionForm = false;
+    reactionError = '';
+    if (!reactionSymptom.trim()) {
+      reactionError = 'Please enter a symptom.';
+      return;
+    }
+    try {
+      const res = await fetch('/api/reactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symptom: reactionSymptom.trim(), severity: reactionSeverity, notes: reactionNotes })
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      const { id } = await res.json();
+      reactions = [...reactions, { id, symptom: reactionSymptom.trim(), severity: reactionSeverity, notes: reactionNotes, created_at: new Date().toISOString() }];
+      reactionSymptom = '';
+      reactionSeverity = 1;
+      reactionNotes = '';
+      showReactionForm = false;
+    } catch {
+      reactionError = 'Failed to save reaction. Please try again.';
+    }
   }
 
   async function saveDayNotes() {
@@ -589,7 +599,8 @@
     <div class="modal-overlay" onclick={() => showReactionForm = false}></div>
     <div class="modal">
       <h3>Log Reaction</h3>
-      <input bind:value={reactionSymptom} placeholder="Symptom (e.g. rash, bloating)" class="modal-input" />
+      {#if reactionError}<div class="reaction-error">{reactionError}</div>{/if}
+      <input bind:value={reactionSymptom} placeholder="Symptom (e.g. rash, bloating)" class="modal-input" oninput={() => reactionError = ''} />
       <div class="severity-row">
         <span>Severity:</span>
         {#each [1,2,3,4] as s}
@@ -935,6 +946,7 @@
   .modal h3 { margin: 0 0 12px; }
   .modal-input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; margin-bottom: 8px; font-family: inherit; font-size: 14px; }
   .modal-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .reaction-error { background: #fff5f5; border: 1px solid #ffcdd2; color: #c00; padding: 8px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; }
   .barcode-modal { width: 340px; }
   .barcode-reader { width: 100%; margin-bottom: 12px; }
   .barcode-reader :global(video) { border-radius: 8px; }
