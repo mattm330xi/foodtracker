@@ -4,17 +4,9 @@
 
 This is a **Cloudflare Workers** project (not Pages).
 
-**Always push to GitHub before deploying.** Commit and push first, then deploy.
+**Always push to GitHub before deploying.** Commit and push to `main` — GitHub Actions auto-deploys via `.github/workflows/deploy.yml`.
 
-Before deploying, source the Cloudflare environment variables (CF_API_TOKEN and CF_ACCOUNT_ID).
-
-Then deploy:
-
-```
-npm run cf:deploy
-```
-
-This runs `wrangler deploy` (Workers deploy, NOT `wrangler pages deploy`).
+**Do not run `npm run cf:deploy` manually** — the CI pipeline handles it.
 
 **D1 migrations** are run separately:
 
