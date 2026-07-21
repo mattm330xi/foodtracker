@@ -15,11 +15,3 @@ CREATE TABLE IF NOT EXISTS credentials (
 
 CREATE INDEX idx_credentials_user ON credentials(user_id);
 CREATE INDEX idx_credentials_cred_id ON credentials(credential_id);
-
--- Create the default user and assign all existing data to them
-INSERT OR IGNORE INTO users (username, timezone) VALUES ('mattm330xi@gmail.com', 'America/New_York');
-
-UPDATE entries SET user_id = (SELECT id FROM users WHERE username = 'mattm330xi@gmail.com') WHERE user_id IS NULL;
-UPDATE reactions SET user_id = (SELECT id FROM users WHERE username = 'mattm330xi@gmail.com') WHERE user_id IS NULL;
-UPDATE favorites SET user_id = (SELECT id FROM users WHERE username = 'mattm330xi@gmail.com') WHERE user_id IS NULL;
-UPDATE meal_templates SET user_id = (SELECT id FROM users WHERE username = 'mattm330xi@gmail.com') WHERE user_id IS NULL;
