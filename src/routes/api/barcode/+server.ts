@@ -1,6 +1,21 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
+function normalize(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+}
+
+function fuzzyMatch(ingredientsText: string, allergen: string): boolean {
+  const normalizedIngredients = normalize(ingredientsText);
+  const normalizedAllergen = normalize(allergen);
+  const ingredientTokens = normalizedIngredients.split(/\s+/).filter(Boolean);
+  const allergenTokens = normalizedAllergen.split(/\s+/).filter(Boolean);
+
+  return allergenTokens.some(aToken =>
+    ingredientTokens.some(iToken => iToken.includes(aToken) || aToken.includes(iToken))
+  );
+}
+
 export const GET: RequestHandler = async ({ url, platform, cookies }) => {
   const barcode = url.searchParams.get('barcode');
 
@@ -57,7 +72,7 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
     const warnings: string[] = [];
     if (userAllergens.length > 0 && ingredientsText) {
       for (const allergen of userAllergens) {
-        if (ingredientsText.includes(allergen)) {
+        if (fuzzyMatch(ingredientsText, allergen)) {
           warnings.push(allergen);
         }
       }
