@@ -70,11 +70,12 @@ npm run check
 Test files:
 - `src/lib/barcodeScanner.test.ts` — scanner teardown lifecycle (8 tests)
 - `src/lib/timezone.test.ts` — UTC/local conversion, no double-offset (6 tests)
-- `src/lib/entries.test.ts` — entries PATCH logic, date filtering (6 tests)
+- `src/lib/entries.test.ts` — entries PATCH logic (meal/created_at/text, any combination), date filtering (8 tests)
 - `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)
 - `src/lib/favorites.test.ts` — favorites CRUD, toggle flow, client-side isFavorited logic (16 tests)
 - `src/lib/pwaInstall.test.ts` — PWA install banner, platform detection, dismissal (14 tests)
-- `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation, needsPasskey (31 tests)
+- `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation, needsPasskey, multi-device sessions (34 tests)
+- `src/lib/allergenMatch.test.ts` — allergen fuzzy-matching: exact/compound/misspelling cases, false-positive regressions (20 tests)
 
 ### Database
 

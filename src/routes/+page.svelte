@@ -1260,7 +1260,7 @@
   .entry-btn.edit:hover { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-bg); }
   .entry-btn.delete:hover { color: var(--danger); background: var(--danger-bg); }
   .meal-badge { font-size: 11px; color: var(--primary); background: var(--primary-bg); padding: 2px 8px; border-radius: var(--radius-full); font-weight: 500; }
-  .entry-img { width: 100%; height: 160px; object-fit: cover; border-radius: var(--radius-sm); margin: 8px 0; background: var(--muted-bg); }
+  .entry-img { width: 100%; height: 200px; object-fit: contain; border-radius: var(--radius-sm); margin: 8px 0; background: var(--muted-bg); }
   .entry-text { margin: 4px 0 0; line-height: 1.45; font-size: 15px; white-space: pre-wrap; }
   .ingredients-details { margin: 4px 0 0; font-size: 12px; }
   .ingredients-details summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; }

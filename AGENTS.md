@@ -39,11 +39,12 @@ Runs all Vitest tests. All must be green before deploying.
 Test files:
 - `src/lib/barcodeScanner.test.ts` — scanner teardown lifecycle (8 tests)
 - `src/lib/timezone.test.ts` — UTC/local conversion, no double-offset (6 tests)
-- `src/lib/entries.test.ts` — entries PATCH logic, date filtering (6 tests)
+- `src/lib/entries.test.ts` — entries PATCH logic (meal/created_at/text, any combination), date filtering (8 tests)
 - `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)
 - `src/lib/favorites.test.ts` — favorites CRUD, toggle flow, client-side isFavorited logic (16 tests)
 - `src/lib/pwaInstall.test.ts` — PWA install banner, platform detection, dismissal (14 tests)
-- `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation, needsPasskey (31 tests)
+- `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation, needsPasskey, multi-device sessions (34 tests)
+- `src/lib/allergenMatch.test.ts` — allergen fuzzy-matching: exact/compound/misspelling cases, false-positive regressions (20 tests)
 
 ## Known Bugs (Fixed)
 
@@ -128,7 +129,7 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 - **Table:** `user_allergens` — one row per ingredient per user, UNIQUE constraint
 - **API:** `GET/POST/DELETE /api/allergens` — CRUD, requires auth
 - **Barcode scan:** `/api/barcode` reads session cookie, queries allergens, returns `warnings` array
-- **Fuzzy matching:** `normalize()` strips punctuation, `fuzzyMatch()` does bidirectional substring + Levenshtein distance (≤2 edit distance for tokens ≥4 chars) to catch typos like "galric" → "garlic"
+- **Fuzzy matching (`src/lib/allergenMatch.ts`):** `normalize()` replaces punctuation with a space (not deletes it, so "garlic)" or "corn/masa" don't merge into one token) before tokenizing. `fuzzyMatch()` requires every word of a multi-word allergen (e.g. "peanut butter") to appear somewhere in the ingredients — matching on just one word was a false-positive source. Per-token matching (`tokenMatches`) is intentionally conservative to avoid flagging allergens that aren't actually present: exact match; one-directional compound-word containment for allergen tokens ≥3 chars (allergen inside a longer ingredient word, e.g. "soy" in "soybean" — never the reverse); and Levenshtein distance for typos, but only between tokens ≥4 chars whose lengths differ by at most 1 (distance ≤1 for 4-5 char tokens, ≤2 for 6+), so a short unrelated word can't "fuzzy match" a longer allergen. Regression: this replaced a looser version that flagged allergens absent from the ingredients (e.g. "garlic" on a garlic-free product) via unbounded substring checks in both directions.
 - **Scan result modal:** Orange banner `⚠️ Contains: garlic, onion` — non-blocking
 - **Saved entries:** Orange border + persistent warning banner on entries with allergen matches
 
