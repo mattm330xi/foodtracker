@@ -57,19 +57,19 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 };
 
 export const PATCH: RequestHandler = async ({ request, platform, locals }) => {
-  const { id, meal, created_at } = await request.json();
+  const { id, meal, created_at, text } = await request.json();
   const db = platform!.env.FTD1;
   const userId = locals.userId;
 
-  if (meal !== undefined && created_at !== undefined) {
-    await db.prepare('UPDATE entries SET meal = ?, created_at = ? WHERE id = ? AND user_id = ?')
-      .bind(meal, created_at, id, userId).run();
-  } else if (meal !== undefined) {
-    await db.prepare('UPDATE entries SET meal = ? WHERE id = ? AND user_id = ?')
-      .bind(meal, id, userId).run();
-  } else if (created_at !== undefined) {
-    await db.prepare('UPDATE entries SET created_at = ? WHERE id = ? AND user_id = ?')
-      .bind(created_at, id, userId).run();
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (meal !== undefined) { fields.push('meal = ?'); values.push(meal); }
+  if (created_at !== undefined) { fields.push('created_at = ?'); values.push(created_at); }
+  if (text !== undefined) { fields.push('text = ?'); values.push(text); }
+
+  if (fields.length > 0) {
+    await db.prepare(`UPDATE entries SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`)
+      .bind(...values, id, userId).run();
   }
 
   return json({ success: true });

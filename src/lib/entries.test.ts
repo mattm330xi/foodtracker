@@ -23,16 +23,16 @@ function createMockDB() {
 
 // ─── Simulate the PATCH handler logic ──────────────────────
 // Replicates the server-side PATCH logic for testing without full SvelteKit context
-function patchEntry(db: any, id: number, meal?: string, created_at?: string, userId?: number) {
-  if (meal !== undefined && created_at !== undefined) {
-    db.prepare('UPDATE entries SET meal = ?, created_at = ? WHERE id = ? AND user_id = ?')
-      .bind(meal, created_at, id, userId).run();
-  } else if (meal !== undefined) {
-    db.prepare('UPDATE entries SET meal = ? WHERE id = ? AND user_id = ?')
-      .bind(meal, id, userId).run();
-  } else if (created_at !== undefined) {
-    db.prepare('UPDATE entries SET created_at = ? WHERE id = ? AND user_id = ?')
-      .bind(created_at, id, userId).run();
+function patchEntry(db: any, id: number, meal?: string, created_at?: string, userId?: number, text?: string) {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (meal !== undefined) { fields.push('meal = ?'); values.push(meal); }
+  if (created_at !== undefined) { fields.push('created_at = ?'); values.push(created_at); }
+  if (text !== undefined) { fields.push('text = ?'); values.push(text); }
+
+  if (fields.length > 0) {
+    db.prepare(`UPDATE entries SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`)
+      .bind(...values, id, userId).run();
   }
 }
 
@@ -82,6 +82,24 @@ describe('entries PATCH logic', () => {
     patchEntry(mockDB.db, 1, 'Snacks', '2026-07-20T18:00:00.000Z', 42);
 
     expect(mockDB.bind).toHaveBeenCalledWith('Snacks', '2026-07-20T18:00:00.000Z', 1, 42);
+  });
+
+  it('updates only text when meal and created_at are not provided', () => {
+    patchEntry(mockDB.db, 1, undefined, undefined, 1, 'Updated note');
+
+    expect(mockDB.prepare).toHaveBeenCalledWith(
+      'UPDATE entries SET text = ? WHERE id = ? AND user_id = ?'
+    );
+    expect(mockDB.bind).toHaveBeenCalledWith('Updated note', 1, 1);
+  });
+
+  it('updates meal, created_at, and text together (full quick-edit save)', () => {
+    patchEntry(mockDB.db, 1, 'Dinner', '2026-07-20T18:00:00.000Z', 1, 'Updated note');
+
+    expect(mockDB.prepare).toHaveBeenCalledWith(
+      'UPDATE entries SET meal = ?, created_at = ?, text = ? WHERE id = ? AND user_id = ?'
+    );
+    expect(mockDB.bind).toHaveBeenCalledWith('Dinner', '2026-07-20T18:00:00.000Z', 'Updated note', 1, 1);
   });
 });
 

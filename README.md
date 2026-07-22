@@ -99,7 +99,7 @@ Passkeys (WebAuthn) and passwords. The flow:
 
 1. **Passkey login:** `login-start` → browser Face ID/Touch ID → `login-finish` → session cookie
 2. **Password login:** `login-password` → PBKDF2-SHA256 verify → session cookie
-3. **Session:** HttpOnly cookie `ft_session` with 60-day rolling expiry, refreshed on each login
+3. **Session:** HttpOnly cookie `ft_session` with 60-day rolling expiry, refreshed on every authenticated request. Multiple devices/browsers can be signed in at once — signing in on one doesn't sign out the others.
 4. **Validation:** `hooks.server.ts` validates session on every request (except login, barcode, static assets)
 5. **Cross-method confirmation:** If you try the wrong auth method, the server prompts you to confirm with your existing method before setting the new one
 6. **Sign out:** clears cookie and deletes session from DB
@@ -181,7 +181,7 @@ src/
 
 - **Tokens:** `src/app.css` defines all colors, radii, shadows, and easing curves as CSS custom properties (`--bg`, `--surface`, `--primary`, `--radius-md`, `--shadow-sm`, `--spring`, etc). No component should hardcode a hex color — reference a token instead.
 - **Dark mode:** `[data-theme="dark"]` overrides the token values. Toggled from the Settings page (Light/Dark/System), stored in `localStorage` and applied via a `data-theme` attribute on `<html>`.
-- **Bottom sheets:** Modals slide up from the bottom using the `sheet-in`/`sheet-out` keyframes with a spring easing curve (`--spring`), rather than centered dialogs.
+- **Bottom sheets:** Modals slide up from the bottom using the `sheet-in`/`sheet-out` keyframes with a spring easing curve (`--spring`), rather than centered dialogs. Each has a draggable handle at the top — swipe it down past 80px to dismiss, or release early to snap back.
 - **Press feedback:** `.btn-press` utility class scales interactive elements to `0.97` on `:active` for native-feeling touch feedback.
 - **Skeleton loading:** `.skeleton` / `.skeleton-text` / `.skeleton-circle` utilities replace "Loading..." text with placeholders matching the real layout.
 - **Meal view toggle:** Meal sections default to a horizontal snap-scroll carousel on mobile widths and a vertical list on desktop; either can be overridden from Settings, persisted in `localStorage`. Each meal's section header stays fixed while its entries scroll horizontally.

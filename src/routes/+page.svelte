@@ -45,6 +45,7 @@
   let editingEntry: number | null = $state(null);
   let editMeal: string = $state('');
   let editTime: string = $state('');
+  let editText: string = $state('');
   let dayNotes: string = $state('');
   let savingNotes = $state(false);
   let dayNotesExpanded = $state(false);
@@ -255,6 +256,53 @@
     if (barcodeTimer) { clearInterval(barcodeTimer); barcodeTimer = null; }
   });
 
+  // Svelte action: drag the sheet-handle down to dismiss its parent bottom sheet.
+  function dragToDismiss(node: HTMLElement, onClose: () => void) {
+    const DISMISS_THRESHOLD = 80;
+    const sheet = node.closest('.modal, .calendar') as HTMLElement | null;
+    let startY = 0;
+    let currentY = 0;
+    let dragging = false;
+
+    function onTouchStart(e: TouchEvent) {
+      dragging = true;
+      startY = e.touches[0].clientY;
+      currentY = startY;
+      if (sheet) sheet.style.transition = 'none';
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      if (!dragging) return;
+      currentY = e.touches[0].clientY;
+      const dy = Math.max(0, currentY - startY);
+      if (sheet) sheet.style.transform = `translateY(${dy}px)`;
+    }
+
+    function onTouchEnd() {
+      if (!dragging) return;
+      dragging = false;
+      const dy = currentY - startY;
+      if (sheet) {
+        sheet.style.transition = '';
+        sheet.style.transform = '';
+      }
+      if (dy > DISMISS_THRESHOLD) onClose();
+    }
+
+    node.addEventListener('touchstart', onTouchStart, { passive: true });
+    node.addEventListener('touchmove', onTouchMove, { passive: true });
+    node.addEventListener('touchend', onTouchEnd);
+
+    return {
+      update(newOnClose: () => void) { onClose = newOnClose; },
+      destroy() {
+        node.removeEventListener('touchstart', onTouchStart);
+        node.removeEventListener('touchmove', onTouchMove);
+        node.removeEventListener('touchend', onTouchEnd);
+      }
+    };
+  }
+
   function selectDate(date: string) {
     selectedDate = date;
     showCalendar = false;
@@ -429,6 +477,7 @@
   function startEditEntry(entry: Entry) {
     editingEntry = entry.id;
     editMeal = entry.meal;
+    editText = entry.text || '';
     const d = new Date(entry.created_at);
     const hours = parseInt(d.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: timezone }));
     const minutes = parseInt(d.toLocaleString('en-US', { minute: 'numeric', timeZone: timezone }));
@@ -443,13 +492,13 @@
     const res = await fetch('/api/entries', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: entry.id, meal: editMeal, created_at: newIso })
+      body: JSON.stringify({ id: entry.id, meal: editMeal, created_at: newIso, text: editText })
     });
     if (!res.ok) {
       alert('Failed to save changes. Please try again.');
       return;
     }
-    entries = entries.map(e => e.id === entry.id ? { ...e, meal: editMeal, created_at: newIso } : e);
+    entries = entries.map(e => e.id === entry.id ? { ...e, meal: editMeal, created_at: newIso, text: editText } : e);
     editingEntry = null;
   }
 
@@ -740,6 +789,7 @@
   {#if showCalendar}
     <div class="calendar-overlay" onclick={() => showCalendar = false}></div>
     <div class="calendar">
+      <div class="sheet-handle" use:dragToDismiss={() => showCalendar = false}></div>
       <div class="calendar-header">
         <button onclick={prevMonth}>‹</button>
         <span>{monthNames[calendarMonth]} {calendarYear}</span>
@@ -820,6 +870,7 @@
   {#if showReactionForm}
     <div class="modal-overlay" onclick={() => showReactionForm = false}></div>
     <div class="modal">
+      <div class="sheet-handle" use:dragToDismiss={() => showReactionForm = false}></div>
       <h3>Log Reaction</h3>
       {#if reactionError}<div class="reaction-error">{reactionError}</div>{/if}
       <input bind:value={reactionSymptom} placeholder="Symptom (e.g. rash, bloating)" class="modal-input" oninput={() => reactionError = ''} />
@@ -910,6 +961,7 @@
   {#if showQuickAdd}
     <div class="modal-overlay" onclick={() => showQuickAdd = false}></div>
     <div class="modal">
+      <div class="sheet-handle" use:dragToDismiss={() => showQuickAdd = false}></div>
       <h3>Quick Add</h3>
       <div class="segmented-tabs">
         <button class="segmented-tab btn-press" class:active={quickAddTab === 'favorites'} onclick={() => setQuickAddTab('favorites')}>⭐ Favorites</button>
@@ -975,6 +1027,7 @@
   {#if showSaveTemplate}
     <div class="modal-overlay" onclick={() => showSaveTemplate = false}></div>
     <div class="modal">
+      <div class="sheet-handle" use:dragToDismiss={() => showSaveTemplate = false}></div>
       <h3>Save as Template</h3>
       <input bind:value={templateName} placeholder="Template name" class="modal-input" />
       <div class="modal-actions">
@@ -1053,15 +1106,18 @@
             </div>
 
             {#if editingEntry === entry.id}
-              <div class="edit-row">
-                <select bind:value={editMeal}>
-                  {#each MEALS as m}
-                    <option value={m}>{m}</option>
-                  {/each}
-                </select>
-                <input type="time" bind:value={editTime} />
-                <button class="edit-save" onclick={() => saveEditEntry(entry)}>Save</button>
-                <button class="edit-cancel" onclick={() => editingEntry = null}>✕</button>
+              <div class="edit-form">
+                <textarea class="edit-text" bind:value={editText} placeholder="Note" rows="2"></textarea>
+                <div class="edit-row">
+                  <select bind:value={editMeal}>
+                    {#each MEALS as m}
+                      <option value={m}>{m}</option>
+                    {/each}
+                  </select>
+                  <input type="time" bind:value={editTime} />
+                  <button class="edit-save btn-press" onclick={() => saveEditEntry(entry)}>Save</button>
+                  <button class="edit-cancel btn-press" onclick={() => editingEntry = null}>✕</button>
+                </div>
               </div>
             {:else}
               <span class="meal-badge">{entry.meal}</span>
@@ -1091,7 +1147,7 @@
                 </details>
               {/if}
             {/if}
-            {#if entry.text}
+            {#if entry.text && editingEntry !== entry.id}
               <p class="entry-text">{entry.text}</p>
             {/if}
           </div>
@@ -1218,7 +1274,13 @@
     padding: 4px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: 600; margin-bottom: 4px;
   }
 
-  .edit-row { display: flex; gap: 4px; margin: 6px 0; align-items: center; }
+  .edit-form { margin: 6px 0; }
+  .edit-text {
+    width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 13px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-xs);
+    background: var(--surface); color: var(--text-primary); resize: vertical; margin-bottom: 4px;
+  }
+  .edit-row { display: flex; gap: 4px; align-items: center; }
   .edit-row select, .edit-row input { margin: 0; padding: 4px 6px; font-size: 13px; border: 1px solid var(--border-strong); border-radius: var(--radius-xs); }
   .edit-row select { flex: 1; }
   .edit-row input[type="time"] { flex: 1; }
@@ -1238,6 +1300,11 @@
   .reaction-title { color: var(--danger); border-bottom-color: var(--danger-border); }
 
   /* ── Sheet overlays & modals ─────────────────────────── */
+  .sheet-handle {
+    width: 36px; height: 4px; margin: 0 auto 16px;
+    background: var(--border-strong); border-radius: 2px;
+    touch-action: none; cursor: grab;
+  }
   .modal-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
     background: rgba(0,0,0,0.4); z-index: 30;
@@ -1250,10 +1317,6 @@
     box-shadow: var(--shadow-sheet); z-index: 40;
     max-height: 85vh; overflow-y: auto;
     animation: sheet-in 0.3s var(--spring);
-  }
-  .modal::before {
-    content: ''; display: block; width: 36px; height: 4px;
-    background: var(--border-strong); border-radius: 2px; margin: 0 auto 16px;
   }
   .modal h3 { margin: 0 0 12px; }
   .modal-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-sizing: border-box; margin-bottom: 8px; font-size: 15px; background: var(--surface); }
@@ -1344,10 +1407,6 @@
     padding: 20px 20px calc(20px + var(--safe-bottom));
     box-shadow: var(--shadow-sheet); z-index: 20;
     animation: sheet-in 0.3s var(--spring);
-  }
-  .calendar::before {
-    content: ''; display: block; width: 36px; height: 4px;
-    background: var(--border-strong); border-radius: 2px; margin: 0 auto 16px;
   }
   .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
   .calendar-header span { font-weight: 600; font-size: 16px; }
