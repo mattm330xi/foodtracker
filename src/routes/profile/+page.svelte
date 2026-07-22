@@ -45,7 +45,12 @@
   let allergenError = $state('');
   let allergenSuccess = $state('');
 
+  let highlightSection = $state('');
+
   onMount(async () => {
+    const params = new URLSearchParams(window.location.search);
+    highlightSection = params.get('highlight') || '';
+
     const res = await fetch('/api/auth');
     const data = await res.json();
     if (!data.user) { goto('/login'); return; }
@@ -54,6 +59,13 @@
     loadCredentials();
     loadAllergens();
     loadAuthMethods();
+
+    if (highlightSection === 'passkey') {
+      setTimeout(() => {
+        const el = document.getElementById('passkey-box');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
   });
 
   async function loadCredentials() {
@@ -242,18 +254,24 @@
         {/if}
       </div>
 
-      {#if passkeyError}<div class="error">{passkeyError}</div>{/if}
-      {#if passkeySuccess}<div class="success">{passkeySuccess}</div>{/if}
-      {#each credentials as cred}
-        <div class="cred-item">
-          <div class="cred-info">
-            <strong>Security Key</strong>
-            <small>{new Date(cred.created_at).toLocaleDateString()}</small>
-          </div>
-          <button class="remove-btn" onclick={() => removePasskey(cred.id)}>Remove</button>
+      <div class="auth-method" id="passkey-box" class:highlighted={highlightSection === 'passkey'}>
+        <div class="auth-method-header">
+          <strong>Passkey / HW Token</strong>
+          <small>{credentials.length} device{credentials.length !== 1 ? 's' : ''}</small>
         </div>
-      {/each}
-      <button class="add-btn" onclick={addPasskey}>+ Add Device</button>
+        {#if passkeyError}<div class="error">{passkeyError}</div>{/if}
+        {#if passkeySuccess}<div class="success">{passkeySuccess}</div>{/if}
+        {#each credentials as cred}
+          <div class="cred-item">
+            <div class="cred-info">
+              <strong>Security Key</strong>
+              <small>{new Date(cred.created_at).toLocaleDateString()}</small>
+            </div>
+            <button class="remove-btn" onclick={() => removePasskey(cred.id)}>Remove</button>
+          </div>
+        {/each}
+        <button class="add-btn" onclick={addPasskey}>+ Add Device</button>
+      </div>
     </div>
 
     <div class="section">
@@ -338,7 +356,8 @@
     padding: 4px 10px; border-radius: 16px; font-size: 13px; font-weight: 500;
   }
   .no-allergens { font-size: 13px; color: #ccc; margin: 0; }
-  .auth-method { padding: 10px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 6px; }
+  .auth-method { padding: 10px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 6px; transition: border-color 0.3s, box-shadow 0.3s; }
+  .auth-method.highlighted { border-color: #4CAF50; box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.25); }
   .auth-method-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
   .auth-method-header strong { font-size: 13px; }
   .auth-method-header small { color: #888; font-size: 11px; }

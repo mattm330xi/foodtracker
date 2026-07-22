@@ -329,6 +329,38 @@ describe('login-password flow', () => {
       .bind('nobody').first();
     expect(user).toBeNull();
   });
+
+  it('returns needsPasskey when user has password but no passkeys', async () => {
+    const { db, users, credentials } = createMockDB();
+    const passwordHash = await hashPassword('mypassword');
+    users.set(1, { id: 1, username: 'testuser', password_hash: passwordHash });
+
+    const user = await db.prepare('SELECT id, password_hash FROM users WHERE username = ?')
+      .bind('testuser').first();
+    expect(await verifyPassword('mypassword', user.password_hash)).toBe(true);
+
+    const hasPasskeys = await db.prepare('SELECT 1 FROM credentials WHERE user_id = ? LIMIT 1')
+      .bind(user.id).first();
+    expect(hasPasskeys).toBeNull();
+
+    // needsPasskey should be true: user has password, no passkeys
+    const needsPasskey = !hasPasskeys;
+    expect(needsPasskey).toBe(true);
+  });
+
+  it('does not return needsPasskey when user has both password and passkeys', async () => {
+    const { db, users, credentials } = createMockDB();
+    const passwordHash = await hashPassword('mypassword');
+    users.set(1, { id: 1, username: 'testuser', password_hash: passwordHash });
+    credentials.set(1, { id: 1, user_id: 1, credential_id: 'cred1' });
+
+    const hasPasskeys = await db.prepare('SELECT 1 FROM credentials WHERE user_id = ? LIMIT 1')
+      .bind(1).first();
+    expect(hasPasskeys).toBeTruthy();
+
+    const needsPasskey = !hasPasskeys;
+    expect(needsPasskey).toBe(false);
+  });
 });
 
 // ─── Set-password flow ─────────────────────────────────────

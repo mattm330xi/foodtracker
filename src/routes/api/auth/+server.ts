@@ -654,6 +654,10 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
       const valid = await verifyPassword(password, user.password_hash);
       if (!valid) return json({ error: 'Incorrect password' }, { status: 401 });
 
+      const hasPasskeys = await db.prepare(
+        'SELECT 1 FROM credentials WHERE user_id = ? LIMIT 1',
+      ).bind(user.id).first();
+
       await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id).run();
       const sessionToken = generateToken();
       const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
@@ -661,7 +665,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
         .bind(user.id, sessionToken, expiresAt).run();
 
       const profile = await db.prepare('SELECT id, username, timezone FROM users WHERE id = ?').bind(user.id).first();
-      return json({ success: true, user: profile }, {
+      return json({ success: true, user: profile, needsPasskey: !hasPasskeys }, {
         headers: { 'Set-Cookie': setSessionCookie(sessionToken, user.id) },
       });
     }

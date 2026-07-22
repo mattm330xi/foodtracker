@@ -216,6 +216,10 @@
       }
 
       if (data.error) { error = data.error; loading = false; step = 'idle'; return; }
+      if (data.needsPasskey) {
+        goto('/profile?highlight=passkey');
+        return;
+      }
       goto('/');
     } catch (e: any) {
       error = e?.name === 'NotAllowedError' ? 'Sign-in was cancelled' : e?.message || 'Failed';

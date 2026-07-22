@@ -42,7 +42,7 @@ Test files:
 - `src/lib/entries.test.ts` — entries PATCH logic, date filtering (6 tests)
 - `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)
 - `src/lib/favorites.test.ts` — favorites CRUD, toggle flow, client-side isFavorited logic (16 tests)
-- `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation (29 tests)
+- `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation, needsPasskey (31 tests)
 
 ## Known Bugs (Fixed)
 
