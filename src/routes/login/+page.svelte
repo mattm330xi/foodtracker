@@ -157,13 +157,17 @@
   }
 </script>
 
-<svelte:head><title>Sign In - Food Tracker</title></svelte:head>
+<svelte:head><title>{mode === 'register' ? 'Create Account' : 'Sign In'} - Food Tracker</title></svelte:head>
 
 <main>
-  <div class="login-card">
-    <div class="logo">🍽️</div>
+  <div class="login-card" class:register-mode={mode === 'register'}>
+    <div class="logo">{mode === 'register' ? '✨' : '🍽️'}</div>
     <h1>Food Tracker</h1>
-    <p class="subtitle">Sign in with a passkey</p>
+    {#if mode === 'register'}
+      <p class="subtitle">Create an account with a passkey</p>
+    {:else}
+      <p class="subtitle">Sign in with a passkey</p>
+    {/if}
 
     {#if error}
       <div class="error">{error}</div>
@@ -172,7 +176,7 @@
     {#if step === 'working'}
       <div class="step-msg">
         <div class="spinner"></div>
-        <p>Waiting for device...</p>
+        <p>{mode === 'register' ? 'Creating your account...' : 'Waiting for device...'}</p>
         <p class="step-hint">Use Touch ID, Face ID, or your security key</p>
         <button class="cancel" onclick={() => { loading = false; step = 'idle'; error = ''; }}>Cancel</button>
       </div>
@@ -186,7 +190,7 @@
           disabled={loading}
         />
         <button type="submit" class="submit" disabled={loading || !username.trim()}>
-          {mode === 'register' ? 'Create Passkey' : 'Sign In'}
+          {mode === 'register' ? 'Create Account' : 'Sign In'}
         </button>
       </form>
 
@@ -206,15 +210,20 @@
   .error { background: #fff5f5; border: 1px solid #ffcdd2; color: #c00; padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
   .input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; margin-bottom: 12px; box-sizing: border-box; text-align: center; font-family: inherit; }
   .input:focus { outline: none; border-color: #4CAF50; }
+  .register-mode .input:focus { border-color: #5B6CF7; }
   .submit { width: 100%; padding: 12px; background: #4CAF50; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .register-mode .submit { background: #5B6CF7; }
   .submit:disabled { opacity: 0.5; cursor: not-allowed; }
   .submit:hover:not(:disabled) { background: #388E3C; }
+  .register-mode .submit:hover:not(:disabled) { background: #4A5AE0; }
   .toggle { background: none; border: none; color: #4CAF50; font-size: 13px; cursor: pointer; margin-top: 16px; padding: 0; font-family: inherit; }
+  .register-mode .toggle { color: #5B6CF7; }
   .toggle:hover { text-decoration: underline; }
   .step-msg { padding: 20px 0; }
   .step-msg p { margin: 8px 0 0; font-size: 15px; }
   .step-hint { color: #888; font-size: 13px !important; }
   .cancel { margin-top: 12px; background: none; border: 1px solid #ddd; color: #888; padding: 6px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
   .spinner { width: 32px; height: 32px; border: 3px solid #eee; border-top-color: #4CAF50; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
+  .register-mode .spinner { border-top-color: #5B6CF7; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
