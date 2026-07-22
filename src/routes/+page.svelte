@@ -413,14 +413,28 @@
     templates = await res.json();
   }
 
-  async function favoriteEntry(entry: Entry) {
+  function isFavorited(entry: Entry): boolean {
+    return entry.text ? favorites.some((f: any) => f.text === entry.text) : false;
+  }
+
+  async function toggleFavorite(entry: Entry) {
     if (!entry.text && !entry.image) return;
-    await fetch('/api/favorites', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: entry.text, image: entry.image, meal: entry.meal })
-    });
-    loadFavorites();
+    const existing = favorites.find((f: any) => f.text === entry.text);
+    if (existing) {
+      await fetch('/api/favorites', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: existing.id })
+      });
+      favorites = favorites.filter((f: any) => f.id !== existing.id);
+    } else {
+      await fetch('/api/favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: entry.text, image: entry.image, meal: entry.meal })
+      });
+      loadFavorites();
+    }
   }
 
   async function applyFavorite(fav: any) {
@@ -871,7 +885,7 @@
             <div class="entry-header">
               <div class="entry-time">{timeOnly(entry.created_at)}</div>
               <div class="entry-actions">
-                <button class="entry-btn" onclick={() => favoriteEntry(entry)}>⭐</button>
+                <button class="entry-btn star" class:star-active={isFavorited(entry)} onclick={() => toggleFavorite(entry)}>⭐</button>
                 <button class="entry-btn" onclick={() => startEditEntry(entry)}>✎</button>
                 <button class="entry-btn delete" onclick={() => { deleteConfirm = entry.id; deleteType = 'entry'; }}>✕</button>
               </div>
@@ -992,6 +1006,9 @@
   .entry-actions { display: flex; gap: 2px; }
   .entry-btn { background: none; border: none; padding: 2px 6px; cursor: pointer; font-size: 14px; color: #aaa; border-radius: 4px; }
   .entry-btn:hover { background: #eee; color: #333; }
+  .entry-btn.star { opacity: 0.4; }
+  .entry-btn.star:hover { opacity: 0.7; }
+  .entry-btn.star-active { opacity: 1; }
   .entry-btn.delete:hover { color: #c00; background: #fee; }
   .meal-badge { font-size: 11px; color: #4CAF50; background: #e8f5e9; padding: 1px 6px; border-radius: 4px; }
   .entry-img { width: 100%; border-radius: 8px; margin: 6px 0; }
