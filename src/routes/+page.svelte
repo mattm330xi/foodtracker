@@ -1046,8 +1046,8 @@
             <div class="entry-header">
               <div class="entry-time">{timeOnly(entry.created_at)}</div>
               <div class="entry-actions">
-                <button class="entry-btn star" class:star-active={isFavorited(entry)} onclick={() => toggleFavorite(entry)}>⭐</button>
-                <button class="entry-btn" onclick={() => startEditEntry(entry)}>✎</button>
+                <button class="entry-btn star" class:star-active={isFavorited(entry)} onclick={() => toggleFavorite(entry)} aria-label={isFavorited(entry) ? 'Remove favorite' : 'Add favorite'}>⭐</button>
+                <button class="entry-btn edit" onclick={() => startEditEntry(entry)} aria-label="Edit entry">✎</button>
                 <button class="entry-btn delete" onclick={() => { deleteConfirm = entry.id; deleteType = 'entry'; }}>✕</button>
               </div>
             </div>
@@ -1197,12 +1197,14 @@
   .entry-actions { display: flex; gap: 2px; }
   .entry-btn { background: none; border: none; padding: 4px 6px; cursor: pointer; font-size: 14px; color: var(--text-tertiary); border-radius: var(--radius-xs); transition: color 0.15s, background 0.15s; }
   .entry-btn:hover { background: var(--border); color: var(--text-primary); }
-  .entry-btn.star { opacity: 0.35; }
-  .entry-btn.star:hover { opacity: 0.6; }
-  .entry-btn.star-active { opacity: 1; }
+  .entry-btn.star { filter: grayscale(1); opacity: 0.55; }
+  .entry-btn.star:hover { opacity: 0.8; }
+  .entry-btn.star-active { filter: none; opacity: 1; }
+  .entry-btn.edit { border: 1px solid var(--border-strong); }
+  .entry-btn.edit:hover { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-bg); }
   .entry-btn.delete:hover { color: var(--danger); background: var(--danger-bg); }
   .meal-badge { font-size: 11px; color: var(--primary); background: var(--primary-bg); padding: 2px 8px; border-radius: var(--radius-full); font-weight: 500; }
-  .entry-img { width: 100%; border-radius: var(--radius-sm); margin: 8px 0; }
+  .entry-img { width: 100%; height: 160px; object-fit: cover; border-radius: var(--radius-sm); margin: 8px 0; background: var(--muted-bg); }
   .entry-text { margin: 4px 0 0; line-height: 1.45; font-size: 15px; white-space: pre-wrap; }
   .ingredients-details { margin: 4px 0 0; font-size: 12px; }
   .ingredients-details summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; }

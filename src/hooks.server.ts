@@ -77,5 +77,20 @@ export const handle: Handle = async ({ event, resolve }) => {
   event.locals.username = row.username;
   event.locals.timezone = row.timezone;
 
+  // Rolling expiry: push the session (DB row + cookie) another 60 days out on every request,
+  // so an active user is never logged out purely because 60 days passed since their last login.
+  const ROLLING_SESSION_MS = 60 * 24 * 60 * 60 * 1000;
+  const newExpiresIso = new Date(Date.now() + ROLLING_SESSION_MS).toISOString();
+  await db.prepare(
+    'UPDATE sessions SET expires_at = ? WHERE user_id = ? AND token = ?'
+  ).bind(newExpiresIso, parseInt(userIdStr), token).run();
+  event.cookies.set('ft_session', session, {
+    path: '/',
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    maxAge: ROLLING_SESSION_MS / 1000
+  });
+
   return resolve(event);
 };

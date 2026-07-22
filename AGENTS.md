@@ -51,6 +51,7 @@ Test files:
 - **addEntry / updateEntry missing error handling** — Local state was updated even when server rejected the request. On refresh, the unpersisted optimistic entry disappeared. Fixed by checking `res.ok` before updating local state.
 - **saveEditEntry fire-and-forget** — Two separate PATCH calls were not awaited, causing race conditions on quick refresh. Fixed by combining into a single awaited PATCH with both `meal` and `created_at`.
 - **qr-scanner not detecting 1D barcodes** — qr-scanner library optimized for QR codes, failed to detect UPC-A/EAN-13 on mobile. Fixed by switching to Native BarcodeDetector API with explicit food barcode formats.
+- **Sessions weren't actually rolling** — `expires_at` was only ever set at login/register time and never touched again, so an active user still got logged out 60 days after their *last login* rather than their *last activity*. Fixed in `hooks.server.ts`: every authenticated request now pushes both the `sessions.expires_at` row and the `ft_session` cookie's `Max-Age` another 60 days out.
 
 ## Architecture Rules
 
