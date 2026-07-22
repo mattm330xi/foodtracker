@@ -425,9 +425,10 @@
   .divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: #eee; }
   .divider::before { left: 0; }
   .divider::after { right: 0; }
-  .link-btn { background: none; border: 1px solid transparent; color: #4CAF50; font-size: 15px; font-weight: 500; cursor: pointer; padding: 12px 16px; border-radius: 10px; font-family: inherit; width: 100%; box-sizing: border-box; }
-  .register-mode .link-btn { color: #5B6CF7; }
-  .link-btn:hover { background: #f5f5f5; text-decoration: underline; }
+  .link-btn { background: #fff; border: 1px solid #ddd; color: #4CAF50; font-size: 15px; font-weight: 500; cursor: pointer; padding: 12px 16px; border-radius: 10px; font-family: inherit; width: 100%; box-sizing: border-box; }
+  .register-mode .link-btn { color: #5B6CF7; border-color: #d0d0f0; }
+  .link-btn:hover { background: #f5f5f5; border-color: #4CAF50; }
+  .register-mode .link-btn:hover { border-color: #5B6CF7; }
   .toggle { background: none; border: none; color: #4CAF50; font-size: 13px; cursor: pointer; margin-top: 16px; padding: 0; font-family: inherit; }
   .register-mode .toggle { color: #5B6CF7; }
   .toggle:hover { text-decoration: underline; }
