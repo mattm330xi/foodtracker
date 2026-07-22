@@ -42,6 +42,7 @@ Test files:
 - `src/lib/entries.test.ts` — entries PATCH logic, date filtering (6 tests)
 - `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)
 - `src/lib/favorites.test.ts` — favorites CRUD, toggle flow, client-side isFavorited logic (16 tests)
+- `src/lib/pwaInstall.test.ts` — PWA install banner, platform detection, dismissal (14 tests)
 - `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation, needsPasskey (31 tests)
 
 ## Known Bugs (Fixed)
@@ -126,6 +127,15 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 - **Fuzzy matching:** `normalize()` strips punctuation, `fuzzyMatch()` does bidirectional substring + Levenshtein distance (≤2 edit distance for tokens ≥4 chars) to catch typos like "galric" → "garlic"
 - **Scan result modal:** Orange banner `⚠️ Contains: garlic, onion` — non-blocking
 - **Saved entries:** Orange border + persistent warning banner on entries with allergen matches
+
+## PWA Install Banner
+
+- **`PwaInstallBanner.svelte`** in `+layout.svelte` — shows on every page
+- **Android:** Listens for `beforeinstallprompt`, shows sticky bottom banner with Install button. Swipeable left/right to dismiss (touch tracking, dismisses at >100px offset)
+- **iOS:** Shows one-time instruction card: "Tap Share ⬆️ then Add to Home Screen"
+- **Dismissal:** Stored in `localStorage` key `pwa_install_dismissed`, hides for 7 days
+- **Standalone check:** `window.matchMedia('(display-mode: standalone')` — never shows if already installed
+- **`pwaInstall.ts`:** Extracts platform detection, dismissal logic, standalone check for testability
 
 ## Svelte 5 Conventions
 

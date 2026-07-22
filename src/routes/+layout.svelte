@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import PwaInstallBanner from '$lib/PwaInstallBanner.svelte';
 
   onMount(() => {
     if ('serviceWorker' in navigator) {
@@ -11,3 +12,4 @@
 </script>
 
 <slot />
+<PwaInstallBanner />

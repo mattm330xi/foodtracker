@@ -18,7 +18,7 @@ A progressive web app for tracking everything you eat — photos, notes, organiz
 - **⚠️ Allergen warnings** — set your allergens in profile, get warnings when scanned products contain them
 - **🔒 Authentication** — passkeys (Face ID / Touch ID) and/or passwords, your choice
 - **👤 Profile** — manage timezone, allergens, passkeys, sign out
-- **📱 Installable PWA** — add to your home screen
+- **📱 Installable PWA** — add to your home screen with guided install prompts
 - **💾 Cloud storage** — all data stored in Cloudflare D1 (SQLite at the edge)
 
 ## Tech Stack
@@ -58,7 +58,7 @@ npm run cf:deploy
 ### Test
 
 ```bash
-# Run all tests (barcode scanner, timezone, entries)
+# Run all tests (barcode scanner, timezone, entries, date range, favorites, PWA install, auth)
 npm test
 
 # Typecheck (must be 0 errors before deploying)
@@ -70,6 +70,9 @@ Test files:
 - `src/lib/timezone.test.ts` — UTC/local conversion, no double-offset (6 tests)
 - `src/lib/entries.test.ts` — entries PATCH logic, date filtering (6 tests)
 - `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)
+- `src/lib/favorites.test.ts` — favorites CRUD, toggle flow, client-side isFavorited logic (16 tests)
+- `src/lib/pwaInstall.test.ts` — PWA install banner, platform detection, dismissal (14 tests)
+- `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation, needsPasskey (31 tests)
 
 ### Database
 
@@ -107,7 +110,7 @@ src/
 ├── app.d.ts                    # TypeScript types (App.Locals, Platform)
 ├── hooks.server.ts             # Session validation middleware
 ├── routes/
-│   ├── +layout.svelte          # Service worker registration
+│   ├── +layout.svelte          # Service worker registration + PWA install banner
 │   ├── +page.svelte            # Main UI (entries, reactions, calendar, favorites, templates, barcode scanner with allergen warnings)
 │   ├── login/+page.svelte      # Passkey + password login/register
 │   ├── profile/+page.svelte    # Timezone, allergens, sign-in methods, sign out
@@ -136,7 +139,11 @@ src/
 │   ├── barcodeScanner.test.ts      # Scanner teardown tests
 │   ├── dateRange.test.ts           # Date range helper tests
 │   ├── auth.test.ts                # Auth (password hashing, registration, login, cross-method confirmation) tests
-│   └── BarcodeScanner.svelte       # Native BarcodeDetector barcode scanner (UPC-A/EAN-13, rAF scan loop, clean teardown)
+│   ├── favorites.test.ts           # Favorites CRUD, toggle flow, client-side isFavorited logic tests
+│   ├── pwaInstall.test.ts          # PWA install banner, platform detection, dismissal tests
+│   ├── BarcodeScanner.svelte       # Native BarcodeDetector barcode scanner (UPC-A/EAN-13, rAF scan loop, clean teardown)
+│   ├── PwaInstallBanner.svelte     # Swipeable install banner (Android) + iOS instructions
+│   └── pwaInstall.ts               # Platform detection, dismissal logic
 ├── migrations/
 │   ├── 0001_initial_schema.sql     # entries table
 │   ├── 0002_add_meal_column.sql    # meal field + auto-assignment
