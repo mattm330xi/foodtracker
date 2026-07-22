@@ -119,6 +119,7 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 - **Table:** `user_allergens` — one row per ingredient per user, UNIQUE constraint
 - **API:** `GET/POST/DELETE /api/allergens` — CRUD, requires auth
 - **Barcode scan:** `/api/barcode` reads session cookie, queries allergens, returns `warnings` array
+- **Fuzzy matching:** `normalize()` strips punctuation, `fuzzyMatch()` does bidirectional substring + Levenshtein distance (≤2 edit distance for tokens ≥4 chars) to catch typos like "galric" → "garlic"
 - **Scan result modal:** Orange banner `⚠️ Contains: garlic, onion` — non-blocking
 - **Saved entries:** Orange border + persistent warning banner on entries with allergen matches
 
