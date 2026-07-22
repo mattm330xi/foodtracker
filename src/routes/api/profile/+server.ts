@@ -101,10 +101,6 @@ async function verifyRegistration(credential: any, expectedChallenge: string, ex
   } catch { return null; }
 }
 
-function setSessionCookie(token: string, userId: number): string {
-  return `ft_session=${userId}:${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${60 * 60 * 24 * 60}`;
-}
-
 // ─── Password hashing (PBKDF2-SHA256) ─────────────────────
 
 async function hashPassword(password: string): Promise<string> {
@@ -169,13 +165,6 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
     const user = await db.prepare('SELECT username FROM users WHERE id = ?').bind(userId).first() as any;
     const existingCreds = await db.prepare('SELECT credential_id FROM credentials WHERE user_id = ?').bind(userId).all();
 
-    // Store challenge temporarily
-    const token = `profreg:${challenge}:${userId}`;
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-    await db.prepare('DELETE FROM sessions WHERE user_id = ? AND token LIKE ?').bind(userId, 'profreg:%').run();
-    await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
-      .bind(userId, token, expiresAt).run();
-
     return json({
       options: {
         rp: { name: RP_NAME, id: rpId },
@@ -192,15 +181,14 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
         excludeCredentials: existingCreds.results.map((c: any) => ({ id: c.credential_id, type: 'public-key' })),
       }
     }, {
-      headers: { 'Set-Cookie': setSessionCookie(token, userId) }
+      headers: { 'Set-Cookie': `ft_passkey_challenge=${challenge}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=120` }
     });
   }
 
   // ── ADD PASSKEY FINISH ───────────────────────────────────
   if (action === 'add-passkey-finish') {
-    const cookie = cookies.get('ft_session');
-    if (!cookie?.startsWith('profreg:')) return json({ error: 'No registration session' }, { status: 401 });
-    const [, challenge] = cookie.split(':');
+    const challenge = cookies.get('ft_passkey_challenge');
+    if (!challenge) return json({ error: 'No passkey registration in progress' }, { status: 401 });
 
     const verified = await verifyRegistration(body.credential, challenge, origin);
     if (!verified) return json({ error: 'Verification failed' }, { status: 400 });
@@ -209,14 +197,9 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
       'INSERT INTO credentials (user_id, credential_id, public_key, counter) VALUES (?, ?, ?, ?)'
     ).bind(userId, verified.credentialId, new Uint8Array(verified.publicKey), verified.signCount).run();
 
-    // Restore real session
-    const realToken = bufToBase64url(crypto.getRandomValues(new Uint8Array(32)).buffer);
-    const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
-    await db.prepare('DELETE FROM sessions WHERE user_id = ? AND token LIKE ?').bind(userId, 'profreg:%').run();
-    await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
-      .bind(userId, realToken, expiresAt).run();
-
-    return json({ success: true }, { headers: { 'Set-Cookie': setSessionCookie(realToken, userId) } });
+    return json({ success: true }, {
+      headers: { 'Set-Cookie': 'ft_passkey_challenge=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0' }
+    });
   }
 
   // ── REMOVE PASSKEY ───────────────────────────────────────
