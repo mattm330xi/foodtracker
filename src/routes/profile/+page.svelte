@@ -170,19 +170,19 @@
     </div>
 
     <div class="section">
-      <h2>Passkeys</h2>
+      <h2>Sign-in Methods</h2>
       {#if passkeyError}<div class="error">{passkeyError}</div>{/if}
       {#if passkeySuccess}<div class="success">{passkeySuccess}</div>{/if}
       {#each credentials as cred}
         <div class="cred-item">
           <div class="cred-info">
-            <strong>Passkey</strong>
+            <strong>Security Key</strong>
             <small>{new Date(cred.created_at).toLocaleDateString()}</small>
           </div>
           <button class="remove-btn" onclick={() => removePasskey(cred.id)}>Remove</button>
         </div>
       {/each}
-      <button class="add-btn" onclick={addPasskey}>+ Add Passkey</button>
+      <button class="add-btn" onclick={addPasskey}>+ Add Device</button>
     </div>
 
     <div class="section">

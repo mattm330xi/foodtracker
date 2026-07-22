@@ -79,7 +79,7 @@
 
       goto('/');
     } catch (e: any) {
-      error = e?.name === 'NotAllowedError' ? 'Passkey creation was cancelled' : e?.message || 'Failed';
+      error = e?.name === 'NotAllowedError' ? 'Sign-in was cancelled' : e?.message || 'Failed';
       loading = false;
       step = 'idle';
     }
@@ -143,7 +143,7 @@
 
       goto('/');
     } catch (e: any) {
-      error = e?.name === 'NotAllowedError' ? 'Passkey authentication was cancelled' : e?.message || 'Failed';
+      error = e?.name === 'NotAllowedError' ? 'Sign-in was cancelled' : e?.message || 'Failed';
       loading = false;
       step = 'idle';
     }
@@ -164,9 +164,9 @@
     <div class="logo">{mode === 'register' ? '✨' : '🍽️'}</div>
     <h1>Food Tracker</h1>
     {#if mode === 'register'}
-      <p class="subtitle">Create an account with a passkey</p>
+      <p class="subtitle">Create your account in one step</p>
     {:else}
-      <p class="subtitle">Sign in with a passkey</p>
+      <p class="subtitle">Sign in with Face ID or Touch ID</p>
     {/if}
 
     {#if error}
@@ -194,6 +194,10 @@
         </button>
       </form>
 
+      {#if mode === 'register'}
+        <p class="trust-blurb">🔒 No password to remember. Your biometrics stay on your device.</p>
+      {/if}
+
       <button class="toggle" onclick={() => { mode = mode === 'login' ? 'register' : 'login'; error = ''; }}>
         {mode === 'login' ? "Don't have an account? Register" : 'Already have an account? Sign in'}
       </button>
@@ -219,6 +223,7 @@
   .toggle { background: none; border: none; color: #4CAF50; font-size: 13px; cursor: pointer; margin-top: 16px; padding: 0; font-family: inherit; }
   .register-mode .toggle { color: #5B6CF7; }
   .toggle:hover { text-decoration: underline; }
+  .trust-blurb { font-size: 12px; color: #999; margin: 12px 0 0; line-height: 1.4; }
   .step-msg { padding: 20px 0; }
   .step-msg p { margin: 8px 0 0; font-size: 15px; }
   .step-hint { color: #888; font-size: 13px !important; }
