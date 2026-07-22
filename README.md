@@ -8,7 +8,7 @@ A progressive web app for tracking everything you eat — photos, notes, organiz
 
 - **📷 Camera capture** — snap photos of your meals directly from your phone
 - **📝 Notes** — add text notes to each entry (use your phone's built-in voice-to-text)
-- **📅 Calendar view** — browse entries by date with green dots (entries) and red dots (reactions)
+- **📅 Calendar view** — browse entries by date with green dots (entries) and red dots (reactions). Add entries to past or future dates with a confirmation prompt.
 - **🍽️ Meal slots** — entries auto-assigned to Breakfast/Lunch/Dinner/Snacks based on your timezone
 - **⚠️ Reaction logging** — log symptoms with severity (Mild/Moderate/Severe/Very Severe) and notes
 - **📊 Stats page** — food-reaction correlations, entry/reaction counts over selectable periods

@@ -113,6 +113,8 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 
 **Manual barcode entry:** Modal includes a text input below the camera for typing barcode numbers directly when camera scanning fails.
 
+**Adding entries to past/future dates:** POST `/api/entries` accepts an optional `date` field (YYYY-MM-DD). If provided, the entry's `created_at` is set to that date at the current time-of-day in the user's timezone. The client shows a confirmation modal for non-today dates (gentle for past, stronger for future). `skipPastWarning` is persisted to localStorage.
+
 ## Allergen System
 
 - **Profile page** (`/profile`): Add/remove allergens (comma-separated input supported)
