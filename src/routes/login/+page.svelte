@@ -217,7 +217,7 @@
 
       if (data.error) { error = data.error; loading = false; step = 'idle'; return; }
       if (data.needsPasskey) {
-        goto('/profile?highlight=passkey');
+        goto('/?openSettings=passkey');
         return;
       }
       goto('/');

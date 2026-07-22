@@ -39,7 +39,7 @@ Runs all Vitest tests. All must be green before deploying.
 Test files:
 - `src/lib/barcodeScanner.test.ts` — scanner teardown lifecycle, stale-detection race (9 tests)
 - `src/lib/timezone.test.ts` — UTC/local conversion, no double-offset (6 tests)
-- `src/lib/entries.test.ts` — entries PATCH logic (meal/created_at/text, any combination), date filtering (8 tests)
+- `src/lib/entries.test.ts` — entries PATCH logic (meal/created_at/text/allergen_warnings, any combination), date filtering (11 tests)
 - `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)
 - `src/lib/favorites.test.ts` — favorites CRUD, toggle flow, client-side isFavorited logic (16 tests)
 - `src/lib/pwaInstall.test.ts` — PWA install banner, platform detection, dismissal (14 tests)
@@ -74,7 +74,7 @@ Migrations in `migrations/` directory. Key tables:
 
 - `users` — id, username, timezone, **password_hash** (PBKDF2-SHA256, nullable)
 - `sessions` — user_id, token, expires_at
-- `entries` — id, text, image, meal, created_at, user_id, day_notes, **barcode_data** (JSON)
+- `entries` — id, text, image, meal, created_at, user_id, day_notes, **barcode_data** (JSON), **allergen_warnings** (JSON array, manually flagged)
 - `reactions` — id, symptom, severity, notes, created_at, user_id
 - `favorites` — id, text, image, meal, use_count, user_id
 - `meal_templates` — id, name, items, user_id
@@ -127,13 +127,37 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 
 ## Allergen System
 
-- **Settings page** (`/profile`): Add/remove allergens (comma-separated input supported)
+- **Settings drawer** (opened from the main page, not a route): Add/remove allergens (comma-separated input supported)
 - **Table:** `user_allergens` — one row per ingredient per user, UNIQUE constraint
 - **API:** `GET/POST/DELETE /api/allergens` — CRUD, requires auth
 - **Barcode scan:** `/api/barcode` reads session cookie, queries allergens, returns `warnings` array
 - **Fuzzy matching (`src/lib/allergenMatch.ts`):** `normalize()` replaces punctuation with a space (not deletes it, so "garlic)" or "corn/masa" don't merge into one token) before tokenizing. `fuzzyMatch()` requires every word of a multi-word allergen (e.g. "peanut butter") to appear somewhere in the ingredients — matching on just one word was a false-positive source. Per-token matching (`tokenMatches`) is intentionally conservative to avoid flagging allergens that aren't actually present: exact match; one-directional compound-word containment for allergen tokens ≥3 chars (allergen inside a longer ingredient word, e.g. "soy" in "soybean" — never the reverse); and Levenshtein distance ≤1 for typos, only between tokens ≥4 chars whose lengths differ by at most 1. Two regressions fixed here: unbounded bidirectional substring checks flagged allergens absent from the ingredients (e.g. "garlic" on a garlic-free product), and a distance-≤2 allowance for 6+ char tokens matched unrelated real words by coincidence (e.g. "garlic" vs "malic" as in malic acid, on Hot Tamales candy, barcode 070970474088). Don't loosen the distance threshold above 1 without a specific reason — it re-opens exactly that failure mode.
 - **Scan result modal:** Orange banner `⚠️ Contains: garlic, onion` — non-blocking
-- **Saved entries:** Orange border + persistent warning banner on entries with allergen matches
+- **Saved entries (barcode-scanned):** Orange border + persistent warning banner on entries with allergen matches, sourced from `barcode_data.warnings`
+
+### Manual allergen flagging (photo/note entries with no barcode)
+
+Barcode scans get automatic allergen matching against the ingredients text, but a photo or text-only entry has no ingredients list to match against — the user has to flag it themselves.
+
+- **Trigger:** tapping anywhere on an entry card (in `+page.svelte`) opens the "Flag Allergen" popover, unless that entry is currently in edit mode. The star/edit/delete buttons, and the ingredients `<details>` on barcode entries, call `stopPropagation()` so tapping them doesn't also open the picker.
+- **Data:** stored in `entries.allergen_warnings` (migration `0012_add_manual_allergen_warnings.sql`) as a JSON array of strings, independent of `barcode_data`. `'*'` (the `GENERIC_ALLERGEN_WARNING` constant) means "may contain an allergen" without naming one; picking any specific allergen clears `'*'` and vice versa (mutually exclusive, enforced in `toggleAllergenSelection`/`toggleGenericAllergenWarning`).
+- **API:** `PATCH /api/entries` accepts `allergen_warnings` as a fourth optional field alongside `meal`/`created_at`/`text` — same dynamic-fields pattern, JSON-stringified before storing, `null` clears it.
+- **Rendering:** a separate `.entry-allergen-warning` banner from the barcode one, driven by `parseAllergenWarnings(entry)`, checked independently of `entryBd?.warnings` for the `entry-warning` card-tint class.
+- **User's allergen list** for the chip picker is loaded once via `loadUserAllergens()` (`+page.svelte`, calls `/api/allergens`) and refreshed whenever the Settings drawer's allergen list changes, via the `onAllergensChanged` callback passed into `SettingsPanel`.
+
+## Stats & Settings Drawers
+
+Stats and Settings used to be separate routes (`/stats`, `/profile`). They are now bottom sheets opened from the main page — there is no `src/routes/stats/` or `src/routes/profile/` anymore. Their content lives in `src/lib/StatsPanel.svelte` and `src/lib/SettingsPanel.svelte`, imported and rendered inside `.modal` sheets by `+page.svelte` (`showStats`/`showSettings` state).
+
+- **StatsPanel** is fully self-contained — same as before, just without the page-level header/back-link (the drawer supplies its own header + close button).
+- **SettingsPanel** needs two-way sync with the main page instead of a fresh page load, since it's now live in the same page instance:
+  - `timezone` and `horizontalScroll` are `$bindable` props (`bind:timezone`, `bind:horizontalScroll` on `<SettingsPanel>` in `+page.svelte`) — changing them in the drawer updates the main page's own state immediately (meal-time calculations, carousel-vs-list rendering) without needing to close and reopen anything.
+  - `highlightSection` is a plain prop (was a URL query param `?highlight=`) — the main page sets `settingsHighlight` before opening the drawer.
+  - `onAllergensChanged` callback tells the main page to reload its own `userAllergens` copy (used by the Flag Allergen picker) whenever the drawer's allergen list changes.
+  - `onSignOut` callback lets the main page control the post-logout redirect.
+  - Theme changes are NOT synced via props — `applyTheme()` sets `document.documentElement`'s `data-theme` attribute directly, which is global and needs no cross-component wiring.
+- **Deep link replacement:** the old `goto('/profile?highlight=passkey')` (used by `login/+page.svelte` after a passkey-less password signup) is now `goto('/?openSettings=passkey')`. The main page's `onMount` checks for `?openSettings=` in the URL, sets `settingsHighlight` and opens the Settings drawer, then strips the query param via `history.replaceState`.
+- If you add a new Settings field that other parts of the main page also read (like timezone/horizontalScroll), make it a bindable prop rather than letting the drawer and main page keep separate copies that can drift apart.
 
 ## PWA Install Banner
 
@@ -147,7 +171,8 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 ## Design System (src/app.css)
 
 - **Never hardcode colors, radii, or shadows in component `<style>` blocks** — use the CSS custom properties defined in `src/app.css` (`--bg`, `--surface`, `--surface-elevated`, `--text-primary/secondary/tertiary`, `--primary`, `--danger`, `--warning`, `--accent`, `--radius-xs/sm/md/lg/xl/full`, `--shadow-xs/sm/md/lg/sheet`, `--spring`, `--ease-out`). If a new color/shape is needed, add a token to `:root` (and its dark-mode override) rather than hardcoding.
-- **Dark mode:** overrides live under `[data-theme="dark"]` in `app.css`. The theme is applied via a `data-theme` attribute on `<html>`, toggled from the Settings page (Light/Dark/System), persisted in `localStorage`. Any new token must get both a light (`:root`) and dark (`[data-theme="dark"]`) value.
+- **Dark mode:** overrides live under `[data-theme="dark"]` in `app.css`. The theme is applied via a `data-theme` attribute on `<html>`, toggled from the Settings drawer (Light/Dark/System), persisted in `localStorage`. Any new token must get both a light (`:root`) and dark (`[data-theme="dark"]`) value.
+- **Native form controls (`<select>`, `<input>`) must set explicit `background` and `color`** — never rely on the browser's default control styling. `app.css`'s global `button, input, textarea, select { color: inherit; }` means a native control's text color follows the surrounding dark-mode text color, but its background stays the browser's UA default (often white) unless set explicitly — that combination is white-on-white in dark mode. `:root`/`[data-theme="dark"]` also set `color-scheme: light`/`color-scheme: dark` respectively as a baseline (fixes native dropdown/date-picker popups and scrollbars), but don't rely on that alone for the control's own box — pair it with explicit `background: var(--surface); color: var(--text-primary);` on the element itself, as `.edit-row select`/`.edit-row input`/`.allergen-input`/`.auth-input` do.
 - **Bottom sheets, not centered dialogs:** modals use `sheet-in`/`sheet-out` keyframes (translateY) with the `--spring` easing curve, plus `overlay-in`/`overlay-out` for the backdrop. Dismissed via the overlay tap or an explicit close/cancel button — there is no drag handle. (A draggable `.sheet-handle` + `dragToDismiss` action was tried and removed: it never worked reliably on Android or macOS Chrome, fighting with native pull-to-refresh/scroll gestures, so don't re-add a swipe-to-dismiss handle without solving that first.)
 - **Press feedback:** apply the `.btn-press` utility class (scale to 0.97 on `:active`) to tappable elements instead of writing bespoke `:active` rules.
 - **Skeleton loading:** use `.skeleton` / `.skeleton-text` / `.skeleton-circle` / `.skeleton-img` instead of "Loading..." text — match the real DOM layout so content doesn't jump in.

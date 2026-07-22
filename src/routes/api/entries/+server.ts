@@ -57,7 +57,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 };
 
 export const PATCH: RequestHandler = async ({ request, platform, locals }) => {
-  const { id, meal, created_at, text } = await request.json();
+  const { id, meal, created_at, text, allergen_warnings } = await request.json();
   const db = platform!.env.FTD1;
   const userId = locals.userId;
 
@@ -66,6 +66,10 @@ export const PATCH: RequestHandler = async ({ request, platform, locals }) => {
   if (meal !== undefined) { fields.push('meal = ?'); values.push(meal); }
   if (created_at !== undefined) { fields.push('created_at = ?'); values.push(created_at); }
   if (text !== undefined) { fields.push('text = ?'); values.push(text); }
+  if (allergen_warnings !== undefined) {
+    fields.push('allergen_warnings = ?');
+    values.push(allergen_warnings === null ? null : JSON.stringify(allergen_warnings));
+  }
 
   if (fields.length > 0) {
     await db.prepare(`UPDATE entries SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`)

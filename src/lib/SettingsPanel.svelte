@@ -1,11 +1,26 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
   import { startRegistration } from '@simplewebauthn/browser';
 
   interface User { id: number; username: string; timezone: string; }
   interface Credential { id: number; credential_id: string; created_at: string; }
   interface Allergen { id: number; ingredient: string; created_at: string; }
+
+  interface Props {
+    highlightSection?: string;
+    timezone?: string;
+    horizontalScroll?: boolean;
+    onAllergensChanged?: () => void;
+    onSignOut?: () => void;
+  }
+
+  let {
+    highlightSection = '',
+    timezone = $bindable('America/New_York'),
+    horizontalScroll = $bindable(false),
+    onAllergensChanged = () => {},
+    onSignOut = () => {},
+  }: Props = $props();
 
   const TIMEZONES = [
     { value: 'America/New_York', label: 'Eastern Time (US)' },
@@ -25,7 +40,6 @@
   ];
 
   let user: User | null = $state(null);
-  let timezone = $state('America/New_York');
   let credentials: Credential[] = $state([]);
   let saving = $state(false);
   let passkeyError = $state('');
@@ -45,11 +59,8 @@
   let allergenError = $state('');
   let allergenSuccess = $state('');
 
-  let highlightSection = $state('');
-
   // Preferences
   let theme = $state<'light' | 'dark' | 'system'>('light');
-  let horizontalScroll = $state(false);
 
   function applyTheme(t: 'light' | 'dark' | 'system') {
     theme = t;
@@ -68,28 +79,20 @@
   }
 
   onMount(async () => {
-    const params = new URLSearchParams(window.location.search);
-    highlightSection = params.get('highlight') || '';
-
     const res = await fetch('/api/auth');
     const data = await res.json();
-    if (!data.user) { goto('/login'); return; }
+    if (!data.user) { window.location.href = '/login'; return; }
     user = data.user;
     timezone = data.user.timezone || 'America/New_York';
     loadCredentials();
     loadAllergens();
     loadAuthMethods();
 
-    // Load preferences
     const savedTheme = localStorage.getItem('ft_theme') as 'light' | 'dark' | 'system' | null;
     if (savedTheme) {
       theme = savedTheme;
       applyTheme(savedTheme);
     }
-    const savedScrollPref = localStorage.getItem('ft_horizontalScroll');
-    horizontalScroll = savedScrollPref !== null
-      ? savedScrollPref === 'true'
-      : window.matchMedia('(max-width: 700px)').matches;
 
     if (highlightSection === 'passkey') {
       setTimeout(() => {
@@ -189,7 +192,7 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'logout' })
     });
-    goto('/login');
+    onSignOut();
   }
 
   async function loadAllergens() {
@@ -221,6 +224,7 @@
       allergenError = 'Already added';
     }
     loadAllergens();
+    onAllergensChanged();
   }
 
   async function removeAllergen(id: number) {
@@ -230,138 +234,130 @@
       body: JSON.stringify({ id })
     });
     loadAllergens();
+    onAllergensChanged();
   }
 </script>
 
-<svelte:head><title>Settings - Food Tracker</title></svelte:head>
+{#if user}
+  <div class="section"><div class="username">{user.username}</div></div>
 
-<main>
-  <header><h1><a href="/" class="back">←</a> Settings</h1></header>
-
-  {#if user}
-    <div class="section"><div class="username">{user.username}</div></div>
-
-    <div class="section">
-      <h2>Preferences</h2>
-      <div class="pref-row">
-        <span class="pref-label">Theme</span>
-        <div class="pref-control">
-          <button class="theme-btn" class:active={theme === 'light'} onclick={() => applyTheme('light')}>Light</button>
-          <button class="theme-btn" class:active={theme === 'dark'} onclick={() => applyTheme('dark')}>Dark</button>
-          <button class="theme-btn" class:active={theme === 'system'} onclick={() => applyTheme('system')}>System</button>
-        </div>
-      </div>
-      <div class="pref-row">
-        <span class="pref-label">Meal view</span>
-        <button class="toggle-btn" onclick={toggleHorizontalScroll}>
-          <span class="toggle-track" class:active={horizontalScroll}>
-            <span class="toggle-thumb"></span>
-          </span>
-          {horizontalScroll ? 'Carousel' : 'List'}
-        </button>
+  <div class="section">
+    <h2>Preferences</h2>
+    <div class="pref-row">
+      <span class="pref-label">Theme</span>
+      <div class="pref-control">
+        <button class="theme-btn" class:active={theme === 'light'} onclick={() => applyTheme('light')}>Light</button>
+        <button class="theme-btn" class:active={theme === 'dark'} onclick={() => applyTheme('dark')}>Dark</button>
+        <button class="theme-btn" class:active={theme === 'system'} onclick={() => applyTheme('system')}>System</button>
       </div>
     </div>
-
-    <div class="section">
-      <h2>Timezone</h2>
-      <select bind:value={timezone} onchange={saveTimezone} class="select">
-        {#each TIMEZONES as tz}<option value={tz.value}>{tz.label}</option>{/each}
-      </select>
-      {#if saving}<span class="saving">Saving...</span>{/if}
+    <div class="pref-row">
+      <span class="pref-label">Meal view</span>
+      <button class="toggle-btn" onclick={toggleHorizontalScroll}>
+        <span class="toggle-track" class:active={horizontalScroll}>
+          <span class="toggle-thumb"></span>
+        </span>
+        {horizontalScroll ? 'Carousel' : 'List'}
+      </button>
     </div>
+  </div>
 
-    <div class="section">
-      <h2>Sign-in Methods</h2>
+  <div class="section">
+    <h2>Timezone</h2>
+    <select bind:value={timezone} onchange={saveTimezone} class="select">
+      {#each TIMEZONES as tz}<option value={tz.value}>{tz.label}</option>{/each}
+    </select>
+    {#if saving}<span class="saving">Saving...</span>{/if}
+  </div>
 
-      <div class="auth-method">
-        <div class="auth-method-header">
-          <strong>Password</strong>
-          <small>{hasPassword ? 'Set' : 'Not set'}</small>
-        </div>
-        {#if showPasswordForm}
-          {#if passwordError}<div class="error">{passwordError}</div>{/if}
-          {#if passwordSuccess}<div class="success">{passwordSuccess}</div>{/if}
-          <input
-            bind:value={newPassword}
-            type="password"
-            placeholder={hasPassword ? 'New password' : 'Password'}
-            autocomplete="new-password"
-            class="auth-input"
-          />
-          <input
-            bind:value={confirmNewPassword}
-            type="password"
-            placeholder="Confirm password"
-            autocomplete="new-password"
-            class="auth-input"
-          />
-          <div class="auth-actions">
-            <button class="auth-save" onclick={setPassword}>Save</button>
-            <button class="auth-cancel" onclick={() => { showPasswordForm = false; passwordError = ''; passwordSuccess = ''; newPassword = ''; confirmNewPassword = ''; }}>Cancel</button>
-          </div>
-        {:else}
-          <button class="add-btn" onclick={() => { showPasswordForm = true; passwordError = ''; passwordSuccess = ''; }}>
-            {hasPassword ? 'Change Password' : 'Set Password'}
-          </button>
-        {/if}
+  <div class="section">
+    <h2>Sign-in Methods</h2>
+
+    <div class="auth-method">
+      <div class="auth-method-header">
+        <strong>Password</strong>
+        <small>{hasPassword ? 'Set' : 'Not set'}</small>
       </div>
-
-      <div class="auth-method" id="passkey-box" class:highlighted={highlightSection === 'passkey'}>
-        <div class="auth-method-header">
-          <strong>Passkey / HW Token</strong>
-          <small>{credentials.length} device{credentials.length !== 1 ? 's' : ''}</small>
-        </div>
-        {#if passkeyError}<div class="error">{passkeyError}</div>{/if}
-        {#if passkeySuccess}<div class="success">{passkeySuccess}</div>{/if}
-        {#each credentials as cred}
-          <div class="cred-item">
-            <div class="cred-info">
-              <strong>Security Key</strong>
-              <small>{new Date(cred.created_at).toLocaleDateString()}</small>
-            </div>
-            <button class="remove-btn" onclick={() => removePasskey(cred.id)}>Remove</button>
-          </div>
-        {/each}
-        <button class="add-btn" onclick={addPasskey}>+ Add Device</button>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Allergens</h2>
-      <p class="section-desc">Ingredients you're allergic to. When scanning barcodes, we'll warn you if a product contains these.</p>
-      {#if allergenError}<div class="error">{allergenError}</div>{/if}
-      {#if allergenSuccess}<div class="success">{allergenSuccess}</div>{/if}
-      <div class="allergen-input-row">
+      {#if showPasswordForm}
+        {#if passwordError}<div class="error">{passwordError}</div>{/if}
+        {#if passwordSuccess}<div class="success">{passwordSuccess}</div>{/if}
         <input
-          bind:value={newAllergen}
-          placeholder="e.g. garlic, onion, peanuts"
-          class="allergen-input"
-          onkeydown={(e) => { if (e.key === 'Enter') addAllergen(); }}
+          bind:value={newPassword}
+          type="password"
+          placeholder={hasPassword ? 'New password' : 'Password'}
+          autocomplete="new-password"
+          class="auth-input"
         />
-        <button class="add-btn allergen-add" onclick={addAllergen}>Add</button>
-      </div>
-      {#if allergens.length > 0}
-        <div class="allergen-list">
-          {#each allergens as a (a.id)}
-            <div class="allergen-item">
-              <span class="allergen-pill">⚠️ {a.ingredient}</span>
-              <button class="remove-btn" onclick={() => removeAllergen(a.id)}>✕</button>
-            </div>
-          {/each}
+        <input
+          bind:value={confirmNewPassword}
+          type="password"
+          placeholder="Confirm password"
+          autocomplete="new-password"
+          class="auth-input"
+        />
+        <div class="auth-actions">
+          <button class="auth-save" onclick={setPassword}>Save</button>
+          <button class="auth-cancel" onclick={() => { showPasswordForm = false; passwordError = ''; passwordSuccess = ''; newPassword = ''; confirmNewPassword = ''; }}>Cancel</button>
         </div>
       {:else}
-        <p class="no-allergens">No allergens added yet.</p>
+        <button class="add-btn" onclick={() => { showPasswordForm = true; passwordError = ''; passwordSuccess = ''; }}>
+          {hasPassword ? 'Change Password' : 'Set Password'}
+        </button>
       {/if}
     </div>
 
-    <div class="section"><button class="logout" onclick={logout}>Sign Out</button></div>
-  {/if}
-</main>
+    <div class="auth-method" id="passkey-box" class:highlighted={highlightSection === 'passkey'}>
+      <div class="auth-method-header">
+        <strong>Passkey / HW Token</strong>
+        <small>{credentials.length} device{credentials.length !== 1 ? 's' : ''}</small>
+      </div>
+      {#if passkeyError}<div class="error">{passkeyError}</div>{/if}
+      {#if passkeySuccess}<div class="success">{passkeySuccess}</div>{/if}
+      {#each credentials as cred}
+        <div class="cred-item">
+          <div class="cred-info">
+            <strong>Security Key</strong>
+            <small>{new Date(cred.created_at).toLocaleDateString()}</small>
+          </div>
+          <button class="remove-btn" onclick={() => removePasskey(cred.id)}>Remove</button>
+        </div>
+      {/each}
+      <button class="add-btn" onclick={addPasskey}>+ Add Device</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Allergens</h2>
+    <p class="section-desc">Ingredients you're allergic to. When scanning barcodes, we'll warn you if a product contains these.</p>
+    {#if allergenError}<div class="error">{allergenError}</div>{/if}
+    {#if allergenSuccess}<div class="success">{allergenSuccess}</div>{/if}
+    <div class="allergen-input-row">
+      <input
+        bind:value={newAllergen}
+        placeholder="e.g. garlic, onion, peanuts"
+        class="allergen-input"
+        onkeydown={(e) => { if (e.key === 'Enter') addAllergen(); }}
+      />
+      <button class="add-btn allergen-add" onclick={addAllergen}>Add</button>
+    </div>
+    {#if allergens.length > 0}
+      <div class="allergen-list">
+        {#each allergens as a (a.id)}
+          <div class="allergen-item">
+            <span class="allergen-pill">⚠️ {a.ingredient}</span>
+            <button class="remove-btn" onclick={() => removeAllergen(a.id)}>✕</button>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <p class="no-allergens">No allergens added yet.</p>
+    {/if}
+  </div>
+
+  <div class="section"><button class="logout" onclick={logout}>Sign Out</button></div>
+{/if}
 
 <style>
-  main { max-width: 560px; margin: 0 auto; padding: 16px; }
-  h1 { margin: 0 0 16px; display: flex; align-items: center; gap: 8px; }
-  .back { text-decoration: none; color: var(--primary); font-size: 20px; }
   .section { margin-bottom: 20px; padding: 16px; background: var(--surface); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
   .username { font-size: 22px; font-weight: 700; text-align: center; letter-spacing: -0.01em; }
   .select {
@@ -395,7 +391,7 @@
   .saving { font-size: 12px; color: var(--text-tertiary); margin-left: 8px; }
   .section-desc { font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; }
   .allergen-input-row { display: flex; gap: 6px; margin-bottom: 10px; }
-  .allergen-input { flex: 1; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 15px; }
+  .allergen-input { flex: 1; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 15px; background: var(--surface); color: var(--text-primary); }
   .allergen-add { width: auto; padding: 8px 14px; margin: 0; }
   .allergen-list { display: flex; flex-wrap: wrap; gap: 6px; }
   .allergen-item { display: flex; align-items: center; gap: 4px; }
@@ -410,7 +406,7 @@
   .auth-method-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
   .auth-method-header strong { font-size: 14px; }
   .auth-method-header small { color: var(--text-tertiary); font-size: 11px; }
-  .auth-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 15px; margin-bottom: 6px; box-sizing: border-box; background: var(--surface); }
+  .auth-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 15px; margin-bottom: 6px; box-sizing: border-box; background: var(--surface); color: var(--text-primary); }
   .auth-actions { display: flex; gap: 6px; }
   .auth-save { flex: 1; padding: 10px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; transition: transform 0.1s; }
   .auth-save:active { transform: scale(0.97); }

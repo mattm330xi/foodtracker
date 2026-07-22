@@ -9,6 +9,7 @@
     created_at: string;
     day_notes: string;
     barcode_data: string | null;
+    allergen_warnings: string | null;
   }
 
   interface Reaction {
@@ -66,6 +67,8 @@
 
   // Barcode
   import BarcodeScanner from '$lib/BarcodeScanner.svelte';
+  import StatsPanel from '$lib/StatsPanel.svelte';
+  import SettingsPanel from '$lib/SettingsPanel.svelte';
   let showBarcode = $state(false);
   let scannedProduct: any = $state(null);
   let scannerStatus: 'idle' | 'scanning' | 'looking_up' | 'success' | 'error' = $state('idle');
@@ -117,6 +120,65 @@
     yesterdayLoaded = true;
   }
 
+  // Manual allergen warning flagging
+  const GENERIC_ALLERGEN_WARNING = '*';
+  let userAllergens: { id: number; ingredient: string }[] = $state([]);
+  let allergenPickerEntry: Entry | null = $state(null);
+  let selectedAllergenWarnings: string[] = $state([]);
+
+  async function loadUserAllergens() {
+    const res = await fetch('/api/allergens');
+    const data = await res.json();
+    userAllergens = data.allergens || [];
+  }
+
+  function parseAllergenWarnings(entry: Entry): string[] {
+    if (!entry.allergen_warnings) return [];
+    try {
+      return JSON.parse(entry.allergen_warnings);
+    } catch {
+      return [];
+    }
+  }
+
+  function openAllergenPicker(entry: Entry) {
+    if (editingEntry === entry.id) return;
+    allergenPickerEntry = entry;
+    selectedAllergenWarnings = parseAllergenWarnings(entry);
+  }
+
+  function toggleAllergenSelection(ingredient: string) {
+    let next = selectedAllergenWarnings.filter(a => a !== GENERIC_ALLERGEN_WARNING);
+    next = next.includes(ingredient)
+      ? next.filter(a => a !== ingredient)
+      : [...next, ingredient];
+    selectedAllergenWarnings = next;
+  }
+
+  function toggleGenericAllergenWarning() {
+    selectedAllergenWarnings = selectedAllergenWarnings.includes(GENERIC_ALLERGEN_WARNING)
+      ? []
+      : [GENERIC_ALLERGEN_WARNING];
+  }
+
+  async function saveAllergenWarning(warnings: string[]) {
+    if (!allergenPickerEntry) return;
+    const id = allergenPickerEntry.id;
+    const value = warnings.length ? warnings : null;
+    const res = await fetch('/api/entries', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, allergen_warnings: value })
+    });
+    if (!res.ok) {
+      alert('Failed to save allergen warning. Please try again.');
+      return;
+    }
+    const stored = value ? JSON.stringify(value) : null;
+    entries = entries.map(e => e.id === id ? { ...e, allergen_warnings: stored } : e);
+    allergenPickerEntry = null;
+  }
+
   function setQuickAddTab(tab: 'favorites' | 'templates' | 'repeat') {
     quickAddTab = tab;
     if (tab === 'repeat') loadYesterdayEntries();
@@ -135,6 +197,11 @@
   // Timezone
   let timezone = $state('America/New_York');
   let username = $state('');
+
+  // Stats / Settings drawers
+  let showStats = $state(false);
+  let showSettings = $state(false);
+  let settingsHighlight = $state('');
 
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const dayNames = ['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -236,6 +303,15 @@
     loadDaysWithEntries(calendarYear, calendarMonth);
     loadFavorites();
     loadTemplates();
+    loadUserAllergens();
+
+    const params = new URLSearchParams(window.location.search);
+    const openSettings = params.get('openSettings');
+    if (openSettings) {
+      settingsHighlight = openSettings;
+      showSettings = true;
+      window.history.replaceState({}, '', window.location.pathname);
+    }
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(console.error);
     }
@@ -423,7 +499,7 @@
       return;
     }
     const { id, meal } = await res.json();
-    entries = [...entries, { id, text, image: imageBase64, meal, created_at: new Date().toISOString(), day_notes: '', barcode_data: null }];
+    entries = [...entries, { id, text, image: imageBase64, meal, created_at: new Date().toISOString(), day_notes: '', barcode_data: null, allergen_warnings: null }];
     text = '';
     imageBase64 = '';
     loadEntries(selectedDate);
@@ -687,7 +763,7 @@
       return;
     }
     const { id, meal } = await res.json();
-    entries = [...entries, { id, text, image: '', meal, created_at: new Date().toISOString(), day_notes: '', barcode_data: barcodeData }];
+    entries = [...entries, { id, text, image: '', meal, created_at: new Date().toISOString(), day_notes: '', barcode_data: barcodeData, allergen_warnings: null }];
     text = '';
     showBarcode = false;
     scannedProduct = null;
@@ -731,9 +807,9 @@
       {#if username}<span class="username">@{username}</span>{/if}
     </div>
     <div class="header-btns">
-      <a href="/stats" class="icon-btn btn-press" title="Stats" aria-label="Stats">
+      <button class="icon-btn btn-press" onclick={() => showStats = true} title="Stats" aria-label="Stats" class:active={showStats}>
         <span class="icon-glyph">📈</span><span class="icon-label">Stats</span>
-      </a>
+      </button>
       <button class="icon-btn btn-press" onclick={() => showQuickAdd = true} title="Quick add" aria-label="Quick add">
         <span class="icon-glyph">⭐</span><span class="icon-label">Quick Add</span>
       </button>
@@ -746,9 +822,9 @@
       <button class="icon-btn btn-press" onclick={() => showCalendar = !showCalendar} title="Calendar" aria-label="Calendar" class:active={showCalendar}>
         <span class="icon-glyph">📅</span><span class="icon-label">Calendar</span>
       </button>
-      <a href="/profile" class="icon-btn btn-press" title="Settings" aria-label="Settings">
+      <button class="icon-btn btn-press" onclick={() => { settingsHighlight = ''; showSettings = true; }} title="Settings" aria-label="Settings" class:active={showSettings}>
         <span class="icon-glyph">⚙️</span><span class="icon-label">Settings</span>
-      </a>
+      </button>
     </div>
   </header>
 
@@ -1015,6 +1091,69 @@
     </div>
   {/if}
 
+  {#if allergenPickerEntry}
+    <div class="modal-overlay" onclick={() => allergenPickerEntry = null}></div>
+    <div class="popover">
+      <div class="popover-header">
+        <h3>Flag Allergen</h3>
+        <button class="popover-close btn-press" onclick={() => allergenPickerEntry = null} aria-label="Close">&times;</button>
+      </div>
+
+      {#if userAllergens.length === 0}
+        <p class="not-found">No allergens set yet. <button class="link-btn" onclick={() => { allergenPickerEntry = null; settingsHighlight = ''; showSettings = true; }}>Add them in Settings</button> to pick specific ones, or use the general warning below.</p>
+      {:else}
+        <div class="allergen-chip-row">
+          {#each userAllergens as a (a.id)}
+            <button
+              class="allergen-chip btn-press"
+              class:active={selectedAllergenWarnings.includes(a.ingredient)}
+              onclick={() => toggleAllergenSelection(a.ingredient)}
+            >{a.ingredient}</button>
+          {/each}
+        </div>
+      {/if}
+
+      <button
+        class="allergen-generic-btn btn-press"
+        class:active={selectedAllergenWarnings.includes(GENERIC_ALLERGEN_WARNING)}
+        onclick={toggleGenericAllergenWarning}
+      >⚠️ Possible allergen (unspecified)</button>
+
+      <div class="confirm-actions" style="margin-top:14px">
+        <button class="confirm-cancel btn-press" onclick={() => saveAllergenWarning([])}>Clear Warning</button>
+        <button class="confirm-add btn-press" onclick={() => saveAllergenWarning(selectedAllergenWarnings)}>Save</button>
+      </div>
+    </div>
+  {/if}
+
+  {#if showStats}
+    <div class="modal-overlay" onclick={() => showStats = false}></div>
+    <div class="modal drawer-panel">
+      <div class="popover-header">
+        <h3>Stats</h3>
+        <button class="popover-close btn-press" onclick={() => showStats = false} aria-label="Close">&times;</button>
+      </div>
+      <StatsPanel />
+    </div>
+  {/if}
+
+  {#if showSettings}
+    <div class="modal-overlay" onclick={() => showSettings = false}></div>
+    <div class="modal drawer-panel">
+      <div class="popover-header">
+        <h3>Settings</h3>
+        <button class="popover-close btn-press" onclick={() => showSettings = false} aria-label="Close">&times;</button>
+      </div>
+      <SettingsPanel
+        bind:timezone
+        bind:horizontalScroll
+        highlightSection={settingsHighlight}
+        onAllergensChanged={loadUserAllergens}
+        onSignOut={() => { showSettings = false; window.location.href = '/login'; }}
+      />
+    </div>
+  {/if}
+
   <div class="date-header">
     <button class="day-nav-btn btn-press" onclick={() => shiftDay(-1)} aria-label="Previous day">‹</button>
     <h2
@@ -1073,15 +1212,30 @@
         {/if}
         {#each mealEntries as entry (entry.id)}
           {@const entryBd = entry.barcode_data ? JSON.parse(entry.barcode_data) : null}
-          <div class="entry" class:entry-warning={entryBd?.warnings?.length}>
+          {@const manualWarnings = parseAllergenWarnings(entry)}
+          <div
+            class="entry"
+            class:entry-warning={entryBd?.warnings?.length || manualWarnings.length}
+            onclick={() => openAllergenPicker(entry)}
+          >
             <div class="entry-header">
               <div class="entry-time">{timeOnly(entry.created_at)}</div>
-              <div class="entry-actions">
+              <div class="entry-actions" onclick={(e) => e.stopPropagation()}>
                 <button class="entry-btn star" class:star-active={isFavorited(entry)} onclick={() => toggleFavorite(entry)} aria-label={isFavorited(entry) ? 'Remove favorite' : 'Add favorite'}>⭐</button>
                 <button class="entry-btn edit" onclick={() => startEditEntry(entry)} aria-label="Edit entry">✎</button>
                 <button class="entry-btn delete" onclick={() => { deleteConfirm = entry.id; deleteType = 'entry'; }}>✕</button>
               </div>
             </div>
+
+            {#if manualWarnings.length}
+              <div class="entry-allergen-warning">
+                {#if manualWarnings.includes(GENERIC_ALLERGEN_WARNING)}
+                  ⚠️ May contain an allergen
+                {:else}
+                  ⚠️ Contains: {manualWarnings.join(', ')}
+                {/if}
+              </div>
+            {/if}
 
             {#if editingEntry === entry.id}
               <div class="edit-form">
@@ -1119,7 +1273,7 @@
                 <p class="entry-text" style="color:var(--danger);font-weight:600;font-size:12px;margin-bottom:2px">Allergens: {bd.allergens.join(', ')}</p>
               {/if}
               {#if bd.ingredients}
-                <details class="ingredients-details">
+                <details class="ingredients-details" onclick={(e) => e.stopPropagation()}>
                   <summary>Ingredients</summary>
                   <p class="entry-text" style="font-size:12px;color:var(--text-secondary);margin:4px 0 0">{bd.ingredients}</p>
                 </details>
@@ -1222,7 +1376,7 @@
   .no-entries { display: flex; align-items: center; gap: 8px; color: var(--text-tertiary); font-size: 13px; padding: 10px 0; }
   .no-entries-icon { font-size: 20px; opacity: 0.7; }
 
-  .entry { background: var(--surface); border-radius: var(--radius-md); padding: 12px; margin-bottom: 8px; box-shadow: var(--shadow-sm); transition: transform 0.1s, box-shadow 0.2s; }
+  .entry { background: var(--surface); border-radius: var(--radius-md); padding: 12px; margin-bottom: 8px; box-shadow: var(--shadow-sm); transition: transform 0.1s, box-shadow 0.2s; cursor: pointer; }
   .entry:active { transform: scale(0.99); }
   .entry.entry-warning { background: var(--warning-bg); box-shadow: none; }
   .entry.reaction { background: var(--danger-bg); box-shadow: none; }
@@ -1259,7 +1413,10 @@
     background: var(--surface); color: var(--text-primary); resize: vertical; margin-bottom: 4px;
   }
   .edit-row { display: flex; gap: 4px; align-items: center; }
-  .edit-row select, .edit-row input { margin: 0; padding: 4px 6px; font-size: 13px; border: 1px solid var(--border-strong); border-radius: var(--radius-xs); }
+  .edit-row select, .edit-row input {
+    margin: 0; padding: 4px 6px; font-size: 13px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xs); background: var(--surface); color: var(--text-primary);
+  }
   .edit-row select { flex: 1; }
   .edit-row input[type="time"] { flex: 1; }
   .edit-save { background: var(--primary); color: #fff; border: none; padding: 4px 10px; font-size: 13px; border-radius: var(--radius-xs); }
@@ -1312,6 +1469,18 @@
   }
   .popover-close:hover { background: var(--border-strong); }
 
+  .allergen-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .allergen-chip {
+    padding: 8px 14px; background: var(--muted-bg); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-full); font-size: 13px; font-weight: 500; color: var(--text-primary);
+  }
+  .allergen-chip.active { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); font-weight: 600; }
+  .allergen-generic-btn {
+    display: block; width: 100%; padding: 10px; background: var(--muted-bg); border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; color: var(--text-secondary);
+  }
+  .allergen-generic-btn.active { background: var(--danger-bg); border: 1px solid var(--danger); color: var(--danger); }
+
   .segmented-tabs { display: flex; gap: 4px; margin-bottom: 14px; background: var(--muted-bg); border-radius: var(--radius-sm); padding: 3px; }
   .segmented-tab {
     flex: 1; padding: 10px 8px; font-size: 14px; border: none; background: none;
@@ -1335,6 +1504,8 @@
   .barcode-result .submit { margin-top: 8px; }
   .allergens { color: var(--danger); font-weight: 600; }
   .not-found { color: var(--text-secondary); text-align: center; padding: 8px 0; }
+  .link-btn { background: none; border: none; padding: 0; color: var(--primary); font-weight: 600; text-decoration: underline; font-size: inherit; }
+  .drawer-panel { max-height: 90vh; }
 
   .fav-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--surface); border-radius: var(--radius-sm); margin-bottom: 6px; box-shadow: var(--shadow-xs); }
   .fav-text { flex: 1; min-width: 0; }

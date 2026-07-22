@@ -23,12 +23,24 @@ function createMockDB() {
 
 // ─── Simulate the PATCH handler logic ──────────────────────
 // Replicates the server-side PATCH logic for testing without full SvelteKit context
-function patchEntry(db: any, id: number, meal?: string, created_at?: string, userId?: number, text?: string) {
+function patchEntry(
+  db: any,
+  id: number,
+  meal?: string,
+  created_at?: string,
+  userId?: number,
+  text?: string,
+  allergen_warnings?: string[] | null,
+) {
   const fields: string[] = [];
   const values: unknown[] = [];
   if (meal !== undefined) { fields.push('meal = ?'); values.push(meal); }
   if (created_at !== undefined) { fields.push('created_at = ?'); values.push(created_at); }
   if (text !== undefined) { fields.push('text = ?'); values.push(text); }
+  if (allergen_warnings !== undefined) {
+    fields.push('allergen_warnings = ?');
+    values.push(allergen_warnings === null ? null : JSON.stringify(allergen_warnings));
+  }
 
   if (fields.length > 0) {
     db.prepare(`UPDATE entries SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`)
@@ -100,6 +112,32 @@ describe('entries PATCH logic', () => {
       'UPDATE entries SET meal = ?, created_at = ?, text = ? WHERE id = ? AND user_id = ?'
     );
     expect(mockDB.bind).toHaveBeenCalledWith('Dinner', '2026-07-20T18:00:00.000Z', 'Updated note', 1, 1);
+  });
+
+  it('sets allergen_warnings as a JSON-stringified array', () => {
+    patchEntry(mockDB.db, 1, undefined, undefined, 1, undefined, ['peanuts', 'dairy']);
+
+    expect(mockDB.prepare).toHaveBeenCalledWith(
+      'UPDATE entries SET allergen_warnings = ? WHERE id = ? AND user_id = ?'
+    );
+    expect(mockDB.bind).toHaveBeenCalledWith('["peanuts","dairy"]', 1, 1);
+  });
+
+  it('clears allergen_warnings when explicitly set to null', () => {
+    patchEntry(mockDB.db, 1, undefined, undefined, 1, undefined, null);
+
+    expect(mockDB.prepare).toHaveBeenCalledWith(
+      'UPDATE entries SET allergen_warnings = ? WHERE id = ? AND user_id = ?'
+    );
+    expect(mockDB.bind).toHaveBeenCalledWith(null, 1, 1);
+  });
+
+  it('leaves allergen_warnings untouched when not provided', () => {
+    patchEntry(mockDB.db, 1, 'Lunch', undefined, 1);
+
+    expect(mockDB.prepare).toHaveBeenCalledWith(
+      'UPDATE entries SET meal = ? WHERE id = ? AND user_id = ?'
+    );
   });
 });
 

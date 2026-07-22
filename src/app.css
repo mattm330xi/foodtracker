@@ -10,6 +10,7 @@ input, textarea, select { -webkit-tap-highlight-color: transparent; }
 
 /* ── Design Tokens ─────────────────────────────────────── */
 :root {
+  color-scheme: light;
   --bg: #F8F6F0;
   --surface: #FFFFFF;
   --surface-elevated: rgba(255,255,255,0.85);
@@ -54,6 +55,7 @@ input, textarea, select { -webkit-tap-highlight-color: transparent; }
 
 /* ── Dark Mode ─────────────────────────────────────────── */
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg: #1C1C1E;
   --surface: #2C2C2E;
   --surface-elevated: rgba(44,44,46,0.88);

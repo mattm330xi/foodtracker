@@ -12,12 +12,12 @@ A progressive web app for tracking everything you eat — photos, notes, organiz
 - **↔️ Swipe/arrow day navigation** — swipe left/right or tap the arrows next to the date heading to move between days
 - **🍽️ Meal slots** — entries auto-assigned to Breakfast/Lunch/Dinner/Snacks based on your timezone
 - **⚠️ Reaction logging** — log symptoms with severity (Mild/Moderate/Severe/Very Severe) and notes
-- **📊 Stats page** — food-reaction correlations, entry/reaction counts, and a daily trend chart over selectable periods
+- **📊 Stats drawer** — food-reaction correlations, entry/reaction counts, and a daily trend chart over selectable periods, opens as a sheet over the main page (not a separate page)
 - **⭐ Quick Add** — one sheet with tabs for Favorites, Meal Templates, and one-tap "repeat yesterday" entries
 - **📷 Barcode scanner** — scan barcodes with your camera, look up products via Open Food Facts
-- **⚠️ Allergen warnings** — set your allergens in Settings, get warnings when scanned products contain them
+- **⚠️ Allergen warnings** — automatic on barcode-scanned products (matched against your ingredients), or flag any entry manually: tap a card to pick which of your allergens it contains, or mark it as a general "may contain an allergen" warning — useful for photo/note entries with no barcode
 - **🔒 Authentication** — passkeys (Face ID / Touch ID) and/or passwords, your choice
-- **⚙️ Settings** — manage timezone, allergens, passkeys, dark mode, meal view, sign out
+- **⚙️ Settings drawer** — manage timezone, allergens, passkeys, dark mode, meal view, sign out, opens as a sheet over the main page (not a separate page)
 - **📱 Installable PWA** — add to your home screen with guided install prompts
 - **💾 Cloud storage** — all data stored in Cloudflare D1 (SQLite at the edge)
 - **🌗 Dark mode** — light/dark/system theme toggle in Settings, backed by CSS custom properties
@@ -70,7 +70,7 @@ npm run check
 Test files:
 - `src/lib/barcodeScanner.test.ts` — scanner teardown lifecycle, stale-detection race (9 tests)
 - `src/lib/timezone.test.ts` — UTC/local conversion, no double-offset (6 tests)
-- `src/lib/entries.test.ts` — entries PATCH logic (meal/created_at/text, any combination), date filtering (8 tests)
+- `src/lib/entries.test.ts` — entries PATCH logic (meal/created_at/text/allergen_warnings, any combination), date filtering (11 tests)
 - `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)
 - `src/lib/favorites.test.ts` — favorites CRUD, toggle flow, client-side isFavorited logic (16 tests)
 - `src/lib/pwaInstall.test.ts` — PWA install banner, platform detection, dismissal (14 tests)
@@ -81,7 +81,7 @@ Test files:
 
 The D1 database `foodtrackerd1` is managed via migrations in `migrations/`. Key tables:
 
-- `entries` — food entries with photo, text, meal slot, day notes, barcode_data (JSON)
+- `entries` — food entries with photo, text, meal slot, day notes, barcode_data (JSON), allergen_warnings (JSON, manually flagged allergens)
 - `reactions` — allergy/symptom reactions with severity
 - `favorites` — saved frequently-used foods
 - `meal_templates` — saved day templates
@@ -115,10 +115,11 @@ src/
 ├── hooks.server.ts             # Session validation middleware
 ├── routes/
 │   ├── +layout.svelte          # Service worker registration + PWA install banner
-│   ├── +page.svelte            # Main UI (entries, reactions, calendar heatmap, Quick Add sheet, barcode scanner with allergen warnings)
+│   ├── +page.svelte            # Main UI: entries, reactions, calendar heatmap, Quick Add sheet, barcode
+│   │                           #   scanner with allergen warnings, manual allergen flagging, and the
+│   │                           #   Stats/Settings drawers (StatsPanel/SettingsPanel rendered as sheets —
+│   │                           #   there are no separate /stats or /profile routes)
 │   ├── login/+page.svelte      # Passkey + password login/register
-│   ├── profile/+page.svelte    # Timezone, allergens, sign-in methods, sign out
-│   ├── stats/+page.svelte      # Food-reaction correlation stats
 │   └── api/
 │       ├── auth/+server.ts     # Passkey + password auth API (login, register, logout)
 │       ├── entries/+server.ts  # CRUD for food entries
@@ -145,9 +146,13 @@ src/
 │   ├── auth.test.ts                # Auth (password hashing, registration, login, cross-method confirmation) tests
 │   ├── favorites.test.ts           # Favorites CRUD, toggle flow, client-side isFavorited logic tests
 │   ├── pwaInstall.test.ts          # PWA install banner, platform detection, dismissal tests
+│   ├── allergenMatch.ts            # Allergen fuzzy-matching (normalize, tokenMatches, fuzzyMatch)
+│   ├── allergenMatch.test.ts       # Allergen fuzzy-matching tests
 │   ├── BarcodeScanner.svelte       # Native BarcodeDetector barcode scanner (UPC-A/EAN-13, rAF scan loop, clean teardown)
 │   ├── PwaInstallBanner.svelte     # Swipeable install banner (Android) + iOS instructions
-│   └── pwaInstall.ts               # Platform detection, dismissal logic
+│   ├── pwaInstall.ts               # Platform detection, dismissal logic
+│   ├── StatsPanel.svelte           # Stats content, rendered inside a drawer by +page.svelte
+│   └── SettingsPanel.svelte        # Settings content, rendered inside a drawer by +page.svelte
 ├── migrations/
 │   ├── 0001_initial_schema.sql     # entries table
 │   ├── 0002_add_meal_column.sql    # meal field + auto-assignment
@@ -159,7 +164,8 @@ src/
 │   ├── 0008_add_barcode_data.sql   # barcode_data JSON column on entries
 │   ├── 0009_add_user_allergens.sql  # user_allergens table
 │   ├── 0010_performance_indexes.sql # session, credential, favorite, template indexes
-│   └── 0011_add_password_hash.sql   # password_hash column for password auth
+│   ├── 0011_add_password_hash.sql   # password_hash column for password auth
+│   └── 0012_add_manual_allergen_warnings.sql # allergen_warnings JSON column on entries (manual flagging)
 ├── vitest.config.ts                # Vitest config (svelte + jsdom)
 └── wrangler.toml                   # Cloudflare Worker config with D1 binding
 ```
