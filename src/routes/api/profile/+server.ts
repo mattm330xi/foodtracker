@@ -105,6 +105,20 @@ function setSessionCookie(token: string, userId: number): string {
   return `ft_session=${userId}:${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${60 * 60 * 24 * 60}`;
 }
 
+// ─── Password hashing (PBKDF2-SHA256) ─────────────────────
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'],
+  );
+  const hash = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial, 256,
+  );
+  return `${bufToBase64url(salt.buffer)}:${bufToBase64url(hash)}`;
+}
+
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
   const action = url.searchParams.get('action');
   const db = platform!.env.FTD1;
@@ -115,6 +129,12 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
       'SELECT id, credential_id, created_at FROM credentials WHERE user_id = ? ORDER BY created_at DESC'
     ).bind(userId).all();
     return json({ credentials: results });
+  }
+
+  if (action === 'check-auth-methods') {
+    const user = await db.prepare('SELECT password_hash FROM users WHERE id = ?').bind(userId).first() as any;
+    const credCount = await db.prepare('SELECT COUNT(*) as cnt FROM credentials WHERE user_id = ?').bind(userId).first() as any;
+    return json({ hasPassword: !!user?.password_hash, passkeyCount: credCount?.cnt ?? 0 });
   }
 
   return json({ error: 'Unknown action' }, { status: 400 });
@@ -130,6 +150,16 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
   // ── TIMEZONE ─────────────────────────────────────────────
   if (body.timezone) {
     await db.prepare('UPDATE users SET timezone = ? WHERE id = ?').bind(body.timezone, userId).run();
+    return json({ success: true });
+  }
+
+  // ── SET PASSWORD ─────────────────────────────────────────
+  if (action === 'set-password') {
+    const { password } = body;
+    if (!password) return json({ error: 'Password required' }, { status: 400 });
+    if (password.length < 8) return json({ error: 'Password must be at least 8 characters' }, { status: 400 });
+    const passwordHash = await hashPassword(password);
+    await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(passwordHash, userId).run();
     return json({ success: true });
   }
 

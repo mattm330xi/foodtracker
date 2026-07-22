@@ -76,6 +76,47 @@ function setSessionCookie(token: string, userId: number): string {
   return `ft_session=${userId}:${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
+// ─── Password hashing (PBKDF2-SHA256) ─────────────────────
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'],
+  );
+  const hash = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial, 256,
+  );
+  return `${bufToBase64url(salt.buffer)}:${bufToBase64url(hash)}`;
+}
+
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [saltB64, hashB64] = stored.split(':');
+  if (!saltB64 || !hashB64) return false;
+  const salt = base64urlToBuf(saltB64);
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'],
+  );
+  const hash = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial, 256,
+  );
+  return bufToBase64url(hash) === hashB64;
+}
+
+// ─── Ghost user check ─────────────────────────────────────
+
+async function isUsernameClaimable(db: any, userId: number): Promise<boolean> {
+  const hasPassword = await db.prepare(
+    'SELECT 1 FROM users WHERE id = ? AND password_hash IS NOT NULL',
+  ).bind(userId).first();
+  if (hasPassword) return false;
+  const hasCredentials = await db.prepare(
+    'SELECT 1 FROM credentials WHERE user_id = ? LIMIT 1',
+  ).bind(userId).first();
+  return !hasCredentials;
+}
+
 // ─── Minimal CBOR parser ───────────────────────────────────
 
 class CborReader {
@@ -351,10 +392,8 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
 
       const existing = await db.prepare('SELECT id FROM users WHERE username = ?').bind(clean).first() as any;
       if (existing) {
-        // Allow re-registration if the user never completed the passkey ceremony
-        const hasCredentials = await db.prepare('SELECT 1 FROM credentials WHERE user_id = ? LIMIT 1').bind(existing.id).first();
-        if (hasCredentials) return json({ error: 'Username already taken' }, { status: 409 });
-        // Clean up orphaned user (no passkey registered)
+        const claimable = await isUsernameClaimable(db, existing.id);
+        if (!claimable) return json({ error: 'Username already taken' }, { status: 409 });
         await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(existing.id).run();
         await db.prepare('DELETE FROM users WHERE id = ?').bind(existing.id).run();
       }
@@ -459,8 +498,14 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
         .all();
 
       if (creds.results.length === 0) {
+        const hasPassword = await db.prepare(
+          'SELECT 1 FROM users WHERE id = ? AND password_hash IS NOT NULL',
+        ).bind(user.id).first();
+        if (hasPassword) {
+          return json({ confirmWithPassword: true });
+        }
         return json(
-          { error: 'No passkeys registered for this account. Register first.' },
+          { error: 'No sign-in method set for this account.' },
           { status: 400 },
         );
       }
@@ -553,6 +598,89 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
       return json({ success: true, user: profile }, {
         headers: { 'Set-Cookie': setSessionCookie(realToken, userId) },
       });
+    }
+
+    // ── REGISTER PASSWORD ──────────────────────────────────
+    if (action === 'register-password') {
+      const { username, password } = body;
+      if (!username || !password) return json({ error: 'Username and password required' }, { status: 400 });
+      if (password.length < 8) return json({ error: 'Password must be at least 8 characters' }, { status: 400 });
+      const clean = username.trim().toLowerCase();
+
+      const existing = await db.prepare('SELECT id FROM users WHERE username = ?').bind(clean).first() as any;
+      if (existing) {
+        const claimable = await isUsernameClaimable(db, existing.id);
+        if (!claimable) return json({ error: 'Username already taken' }, { status: 409 });
+        await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(existing.id).run();
+        await db.prepare('DELETE FROM users WHERE id = ?').bind(existing.id).run();
+      }
+
+      const passwordHash = await hashPassword(password);
+      const result = await db.prepare(
+        'INSERT INTO users (username, password_hash) VALUES (?, ?)',
+      ).bind(clean, passwordHash).run();
+      const userId = result.meta.last_row_id as number;
+
+      const sessionToken = generateToken();
+      const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
+      await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
+        .bind(userId, sessionToken, expiresAt).run();
+
+      const profile = await db.prepare('SELECT id, username, timezone FROM users WHERE id = ?').bind(userId).first();
+      return json({ success: true, user: profile }, {
+        headers: { 'Set-Cookie': setSessionCookie(sessionToken, userId) },
+      });
+    }
+
+    // ── LOGIN PASSWORD ─────────────────────────────────────
+    if (action === 'login-password') {
+      const { username, password } = body;
+      if (!username || !password) return json({ error: 'Username and password required' }, { status: 400 });
+      const clean = username.trim().toLowerCase();
+
+      const user = await db.prepare('SELECT id, password_hash FROM users WHERE username = ?').bind(clean).first() as any;
+      if (!user) return json({ error: 'No account found with that username' }, { status: 404 });
+
+      if (!user.password_hash) {
+        const hasPasskeys = await db.prepare(
+          'SELECT 1 FROM credentials WHERE user_id = ? LIMIT 1',
+        ).bind(user.id).first();
+        if (hasPasskeys) {
+          return json({ confirmWithPasskey: true });
+        }
+        return json({ error: 'No sign-in method set for this account.' }, { status: 400 });
+      }
+
+      const valid = await verifyPassword(password, user.password_hash);
+      if (!valid) return json({ error: 'Incorrect password' }, { status: 401 });
+
+      await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id).run();
+      const sessionToken = generateToken();
+      const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
+      await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
+        .bind(user.id, sessionToken, expiresAt).run();
+
+      const profile = await db.prepare('SELECT id, username, timezone FROM users WHERE id = ?').bind(user.id).first();
+      return json({ success: true, user: profile }, {
+        headers: { 'Set-Cookie': setSessionCookie(sessionToken, user.id) },
+      });
+    }
+
+    // ── SET PASSWORD (logged-in user) ──────────────────────
+    if (action === 'set-password') {
+      const session = cookies.get('ft_session');
+      const parts = session?.split(':');
+      if (!parts || parts.length < 2) return json({ error: 'Not authenticated' }, { status: 401 });
+      const userId = parseInt(parts[0]);
+      if (!userId) return json({ error: 'Not authenticated' }, { status: 401 });
+
+      const { password } = body;
+      if (!password) return json({ error: 'Password required' }, { status: 400 });
+      if (password.length < 8) return json({ error: 'Password must be at least 8 characters' }, { status: 400 });
+
+      const passwordHash = await hashPassword(password);
+      await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(passwordHash, userId).run();
+      return json({ success: true });
     }
 
     // ── LOGOUT ──────────────────────────────────────────────

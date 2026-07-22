@@ -16,7 +16,7 @@ A progressive web app for tracking everything you eat — photos, notes, organiz
 - **📋 Meal templates** — save a day as a template and re-use it
 - **📷 Barcode scanner** — scan barcodes with your camera, look up products via Open Food Facts
 - **⚠️ Allergen warnings** — set your allergens in profile, get warnings when scanned products contain them
-- **🔒 Passkey authentication** — WebAuthn passkeys (Touch ID / Face ID), no passwords
+- **🔒 Authentication** — passkeys (Face ID / Touch ID) and/or passwords, your choice
 - **👤 Profile** — manage timezone, allergens, passkeys, sign out
 - **📱 Installable PWA** — add to your home screen
 - **💾 Cloud storage** — all data stored in Cloudflare D1 (SQLite at the edge)
@@ -27,7 +27,7 @@ A progressive web app for tracking everything you eat — photos, notes, organiz
 - **Backend:** Cloudflare Worker
 - **Database:** Cloudflare D1 (SQLite)
 - **Hosting:** Cloudflare Workers
-- **Auth:** WebAuthn passkeys (no passwords)
+- **Auth:** Passkeys (WebAuthn) + optional password fallback
 - **Images:** Base64 JPEG in D1 (compressed to 800px, ~0.6 quality)
 
 ## Development
@@ -90,12 +90,14 @@ All dates/times are stored as ISO 8601 UTC strings. The frontend converts to the
 
 ### Authentication
 
-Passkey-only (WebAuthn). No passwords, no PINs. The flow:
+Passkeys (WebAuthn) and passwords. The flow:
 
-1. **Login:** `login-start` → browser Touch ID → `login-finish` → session cookie
-2. **Session:** HttpOnly cookie `ft_session` with 60-day rolling expiry, refreshed on each login
-3. **Validation:** `hooks.server.ts` validates session on every request (except login, barcode, static assets)
-4. **Sign out:** clears cookie and deletes session from DB
+1. **Passkey login:** `login-start` → browser Face ID/Touch ID → `login-finish` → session cookie
+2. **Password login:** `login-password` → PBKDF2-SHA256 verify → session cookie
+3. **Session:** HttpOnly cookie `ft_session` with 60-day rolling expiry, refreshed on each login
+4. **Validation:** `hooks.server.ts` validates session on every request (except login, barcode, static assets)
+5. **Cross-method confirmation:** If you try the wrong auth method, the server prompts you to confirm with your existing method before setting the new one
+6. **Sign out:** clears cookie and deletes session from DB
 
 ## Project Structure
 
@@ -107,18 +109,18 @@ src/
 ├── routes/
 │   ├── +layout.svelte          # Service worker registration
 │   ├── +page.svelte            # Main UI (entries, reactions, calendar, favorites, templates, barcode scanner with allergen warnings)
-│   ├── login/+page.svelte      # Passkey login/register
-│   ├── profile/+page.svelte    # Timezone, allergens, passkey management, sign out
+│   ├── login/+page.svelte      # Passkey + password login/register
+│   ├── profile/+page.svelte    # Timezone, allergens, sign-in methods, sign out
 │   ├── stats/+page.svelte      # Food-reaction correlation stats
 │   └── api/
-│       ├── auth/+server.ts     # WebAuthn API (login, register, logout)
+│       ├── auth/+server.ts     # Passkey + password auth API (login, register, logout)
 │       ├── entries/+server.ts  # CRUD for food entries
 │       ├── reactions/+server.ts # CRUD for reactions
 │       ├── day-notes/+server.ts # Day-level notes
 │       ├── favorites/+server.ts # CRUD for favorites
 │       ├── templates/+server.ts # CRUD for meal templates
 │       ├── stats/+server.ts    # Food-reaction correlation stats
-│       ├── profile/+server.ts  # Timezone, passkey management
+│       ├── profile/+server.ts  # Timezone, sign-in methods, passkey management
 │       ├── barcode/+server.ts  # Open Food Facts lookup + allergen check
 │       ├── allergens/+server.ts # CRUD for user allergens
 ├── static/
@@ -132,6 +134,8 @@ src/
 │   ├── timezone.test.ts            # Timezone tests
 │   ├── entries.test.ts             # Entries API logic tests
 │   ├── barcodeScanner.test.ts      # Scanner teardown tests
+│   ├── dateRange.test.ts           # Date range helper tests
+│   ├── auth.test.ts                # Auth (password hashing, registration, login, cross-method confirmation) tests
 │   └── BarcodeScanner.svelte       # Native BarcodeDetector barcode scanner (UPC-A/EAN-13, rAF scan loop, clean teardown)
 ├── migrations/
 │   ├── 0001_initial_schema.sql     # entries table
@@ -142,7 +146,9 @@ src/
 │   ├── 0006_add_users_and_user_id.sql   # users table + user_id foreign keys
 │   ├── 0007_webauthn.sql           # credentials table (WebAuthn)
 │   ├── 0008_add_barcode_data.sql   # barcode_data JSON column on entries
-│   └── 0009_add_user_allergens.sql  # user_allergens table
+│   ├── 0009_add_user_allergens.sql  # user_allergens table
+│   ├── 0010_performance_indexes.sql # session, credential, favorite, template indexes
+│   └── 0011_add_password_hash.sql   # password_hash column for password auth
 ├── vitest.config.ts                # Vitest config (svelte + jsdom)
 └── wrangler.toml                   # Cloudflare Worker config with D1 binding
 ```
@@ -152,7 +158,7 @@ src/
 - **SvelteKit over Next.js:** Next.js is deprecated on Cloudflare Pages
 - **Worker deployment over Pages:** wrangler.toml uses `main` + `[assets]`
 - **Base64 in D1 over R2:** images compressed to 800px JPEG ~0.6 quality
-- **WebAuthn (passkeys) over passwords:** user explicitly requested passkey-only auth
+- **Passkeys + password fallback:** passkeys as primary auth (Touch ID / Face ID), optional password for browsers without WebAuthn support. Cross-method confirmation flow for adding a second auth method.
 - **Manual CBOR parsing + `crypto.subtle`:** avoids Node.js dependencies that don't work on Workers
 - **All timestamps as ISO 8601 UTC:** `new Date().toISOString()` in JS, not SQLite's `datetime('now')`
 - **Session cookie:** `HttpOnly; Secure; SameSite=Lax; Path=/` with 60-day Max-Age, rolling refresh on login

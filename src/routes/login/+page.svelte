@@ -2,10 +2,15 @@
   import { goto } from '$app/navigation';
 
   let mode: 'login' | 'register' = $state('login');
+  let authMethod: 'passkey' | 'password' = $state('passkey');
   let username = $state('');
+  let password = $state('');
+  let confirmPassword = $state('');
   let loading = $state(false);
   let error = $state('');
   let step: 'idle' | 'working' = $state('idle');
+  let confirmMessage = $state('');
+  let pendingPassword = $state('');
 
   function bufToBase64url(buf: ArrayBuffer): string {
     const bytes = new Uint8Array(buf);
@@ -22,6 +27,8 @@
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     return bytes.buffer;
   }
+
+  // ─── Passkey registration ─────────────────────────────────
 
   async function handleRegister() {
     error = '';
@@ -72,7 +79,7 @@
       const finishRes = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'register-finish', credential }),
+        body: JSON.stringify({ action: 'register-finish', credential: body }),
       });
       const finishData = await finishRes.json();
       if (finishData.error) { error = finishData.error; loading = false; step = 'idle'; return; }
@@ -85,8 +92,11 @@
     }
   }
 
+  // ─── Passkey login ────────────────────────────────────────
+
   async function handleLogin() {
     error = '';
+    confirmMessage = '';
     loading = true;
     step = 'working';
 
@@ -97,6 +107,15 @@
         body: JSON.stringify({ action: 'login-start', username }),
       });
       const startData = await startRes.json();
+
+      if (startData.confirmWithPassword) {
+        loading = false;
+        step = 'idle';
+        authMethod = 'password';
+        confirmMessage = 'Enter your password to add Face ID or Touch ID to this account.';
+        return;
+      }
+
       if (startData.error) { error = startData.error; loading = false; step = 'idle'; return; }
 
       const opts = startData.options;
@@ -132,11 +151,7 @@
       const finishRes = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'login-finish',
-          credential: body,
-          userId: startData.userId,
-        }),
+        body: JSON.stringify({ action: 'login-finish', credential: body, userId: startData.userId }),
       });
       const finishData = await finishRes.json();
       if (finishData.error) { error = finishData.error; loading = false; step = 'idle'; return; }
@@ -149,11 +164,150 @@
     }
   }
 
+  // ─── Password registration ────────────────────────────────
+
+  async function handleRegisterPassword() {
+    error = '';
+    if (password !== confirmPassword) { error = 'Passwords do not match'; return; }
+    if (password.length < 8) { error = 'Password must be at least 8 characters'; return; }
+    loading = true;
+    step = 'working';
+
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register-password', username, password }),
+      });
+      const data = await res.json();
+      if (data.error) { error = data.error; loading = false; step = 'idle'; return; }
+      goto('/');
+    } catch (e: any) {
+      error = e?.message || 'Failed';
+      loading = false;
+      step = 'idle';
+    }
+  }
+
+  // ─── Password login (+ cross-method flow) ─────────────────
+
+  async function handleLoginPassword() {
+    error = '';
+    confirmMessage = '';
+    loading = true;
+    step = 'working';
+
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login-password', username, password }),
+      });
+      const data = await res.json();
+
+      if (data.confirmWithPasskey) {
+        pendingPassword = password;
+        password = '';
+        loading = true;
+        step = 'working';
+        confirmMessage = 'Use your Face ID or Touch ID to add password access.';
+        await finishPasskeyAfterPasswordConfirm();
+        return;
+      }
+
+      if (data.error) { error = data.error; loading = false; step = 'idle'; return; }
+      goto('/');
+    } catch (e: any) {
+      error = e?.name === 'NotAllowedError' ? 'Sign-in was cancelled' : e?.message || 'Failed';
+      loading = false;
+      step = 'idle';
+    }
+  }
+
+  // ─── Cross-method: passkey confirm → set password ─────────
+
+  async function finishPasskeyAfterPasswordConfirm() {
+    try {
+      const startRes = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login-start', username }),
+      });
+      const startData = await startRes.json();
+      if (startData.error) { error = startData.error; loading = false; step = 'idle'; pendingPassword = ''; return; }
+
+      const opts = startData.options;
+      const credential = await navigator.credentials.get({
+        publicKey: {
+          challenge: base64urlToBuf(opts.challenge),
+          rpId: opts.rpId,
+          allowCredentials: opts.allowCredentials?.map((c: any) => ({
+            id: base64urlToBuf(c.id),
+            type: 'public-key' as PublicKeyCredentialType,
+            transports: c.transports as AuthenticatorTransport[],
+          })),
+          userVerification: opts.userVerification,
+          timeout: opts.timeout,
+        }
+      }) as PublicKeyCredential;
+      const response = credential.response as AuthenticatorAssertionResponse;
+
+      const finishRes = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'login-finish',
+          credential: {
+            id: credential.id,
+            rawId: bufToBase64url(credential.rawId),
+            type: credential.type,
+            response: {
+              clientDataJSON: bufToBase64url(response.clientDataJSON),
+              authenticatorData: bufToBase64url(response.authenticatorData),
+              signature: bufToBase64url(response.signature),
+              userHandle: response.userHandle ? bufToBase64url(response.userHandle) : null,
+            },
+          },
+          userId: startData.userId,
+        }),
+      });
+      const finishData = await finishRes.json();
+      if (finishData.error) { error = finishData.error; loading = false; step = 'idle'; pendingPassword = ''; return; }
+
+      const setPasswordRes = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-password', password: pendingPassword }),
+      });
+      const setPasswordData = await setPasswordRes.json();
+      pendingPassword = '';
+
+      if (setPasswordData.error) {
+        error = 'Signed in but failed to set password. You can set it from your profile.';
+        loading = false;
+        step = 'idle';
+        return;
+      }
+
+      goto('/');
+    } catch (e: any) {
+      error = e?.name === 'NotAllowedError' ? 'Sign-in was cancelled' : e?.message || 'Failed';
+      loading = false;
+      step = 'idle';
+      pendingPassword = '';
+    }
+  }
+
   function submit(e: Event) {
     e.preventDefault();
     if (!username.trim()) return;
-    if (mode === 'register') handleRegister();
-    else handleLogin();
+    if (mode === 'register') {
+      if (authMethod === 'passkey') handleRegister();
+      else handleRegisterPassword();
+    } else {
+      if (authMethod === 'passkey') handleLogin();
+      else handleLoginPassword();
+    }
   }
 </script>
 
@@ -164,13 +318,17 @@
     <div class="logo">{mode === 'register' ? '✨' : '🍽️'}</div>
     <h1>Food Tracker</h1>
     {#if mode === 'register'}
-      <p class="subtitle">Create your account in one step</p>
+      <p class="subtitle">Create your account</p>
     {:else}
-      <p class="subtitle">Sign in with Face ID or Touch ID</p>
+      <p class="subtitle">Sign in to your account</p>
     {/if}
 
     {#if error}
       <div class="error">{error}</div>
+    {/if}
+
+    {#if confirmMessage}
+      <div class="confirm-msg">{confirmMessage}</div>
     {/if}
 
     {#if step === 'working'}
@@ -178,27 +336,61 @@
         <div class="spinner"></div>
         <p>{mode === 'register' ? 'Creating your account...' : 'Waiting for device...'}</p>
         <p class="step-hint">Use Touch ID, Face ID, or your security key</p>
-        <button class="cancel" onclick={() => { loading = false; step = 'idle'; error = ''; }}>Cancel</button>
+        <button class="cancel" onclick={() => { loading = false; step = 'idle'; error = ''; confirmMessage = ''; pendingPassword = ''; }}>Cancel</button>
       </div>
     {:else}
       <form onsubmit={submit}>
         <input
           bind:value={username}
           placeholder="Username"
-          autocomplete="username webauthn"
+          autocomplete="username"
           class="input"
           disabled={loading}
         />
-        <button type="submit" class="submit" disabled={loading || !username.trim()}>
-          {mode === 'register' ? 'Create Account' : 'Sign In'}
-        </button>
+
+        {#if authMethod === 'passkey'}
+          <button type="submit" class="submit passkey-btn" disabled={loading || !username.trim()}>
+            {mode === 'register' ? 'Create with Face ID / Touch ID' : 'Sign in with Face ID / Touch ID'}
+          </button>
+
+          <div class="divider">or</div>
+
+          <button type="button" class="link-btn" onclick={() => { authMethod = 'password'; error = ''; confirmMessage = ''; }}>
+            Use a password instead
+          </button>
+        {:else}
+          <input
+            bind:value={password}
+            type="password"
+            placeholder="Password"
+            autocomplete={mode === 'register' ? 'new-password' : 'current-password'}
+            class="input"
+            disabled={loading}
+          />
+          {#if mode === 'register'}
+            <input
+              bind:value={confirmPassword}
+              type="password"
+              placeholder="Confirm password"
+              autocomplete="new-password"
+              class="input"
+              disabled={loading}
+            />
+          {/if}
+
+          <button type="submit" class="submit" disabled={loading || !username.trim() || !password.trim()}>
+            {mode === 'register' ? 'Create Account' : 'Sign In'}
+          </button>
+
+          <div class="divider">or</div>
+
+          <button type="button" class="link-btn" onclick={() => { authMethod = 'passkey'; error = ''; confirmMessage = ''; password = ''; confirmPassword = ''; }}>
+            {mode === 'register' ? 'Use Face ID / Touch ID instead' : 'Use Face ID / Touch ID instead'}
+          </button>
+        {/if}
       </form>
 
-      {#if mode === 'register'}
-        <p class="trust-blurb">🔒 No password to remember. Your biometrics stay on your device.</p>
-      {/if}
-
-      <button class="toggle" onclick={() => { mode = mode === 'login' ? 'register' : 'login'; error = ''; }}>
+      <button class="toggle" onclick={() => { mode = mode === 'login' ? 'register' : 'login'; error = ''; confirmMessage = ''; password = ''; confirmPassword = ''; }}>
         {mode === 'login' ? "Don't have an account? Register" : 'Already have an account? Sign in'}
       </button>
     {/if}
@@ -212,18 +404,29 @@
   h1 { margin: 0 0 4px; font-size: 22px; }
   .subtitle { margin: 0 0 20px; color: #888; font-size: 14px; }
   .error { background: #fff5f5; border: 1px solid #ffcdd2; color: #c00; padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .confirm-msg { background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
   .input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; margin-bottom: 12px; box-sizing: border-box; text-align: center; font-family: inherit; }
   .input:focus { outline: none; border-color: #4CAF50; }
   .register-mode .input:focus { border-color: #5B6CF7; }
   .submit { width: 100%; padding: 12px; background: #4CAF50; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .register-mode .submit { background: #5B6CF7; }
+  .passkey-btn { background: #333; }
+  .passkey-btn:hover { background: #555; }
+  .register-mode .passkey-btn { background: #5B6CF7; }
+  .register-mode .passkey-btn:hover { background: #4A5AE0; }
   .submit:disabled { opacity: 0.5; cursor: not-allowed; }
   .submit:hover:not(:disabled) { background: #388E3C; }
   .register-mode .submit:hover:not(:disabled) { background: #4A5AE0; }
+  .divider { margin: 16px 0; font-size: 13px; color: #bbb; position: relative; }
+  .divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: #eee; }
+  .divider::before { left: 0; }
+  .divider::after { right: 0; }
+  .link-btn { background: none; border: none; color: #4CAF50; font-size: 13px; cursor: pointer; padding: 0; font-family: inherit; }
+  .register-mode .link-btn { color: #5B6CF7; }
+  .link-btn:hover { text-decoration: underline; }
   .toggle { background: none; border: none; color: #4CAF50; font-size: 13px; cursor: pointer; margin-top: 16px; padding: 0; font-family: inherit; }
   .register-mode .toggle { color: #5B6CF7; }
   .toggle:hover { text-decoration: underline; }
-  .trust-blurb { font-size: 12px; color: #999; margin: 12px 0 0; line-height: 1.4; }
   .step-msg { padding: 20px 0; }
   .step-msg p { margin: 8px 0 0; font-size: 15px; }
   .step-hint { color: #888; font-size: 13px !important; }

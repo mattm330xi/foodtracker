@@ -31,6 +31,14 @@
   let passkeyError = $state('');
   let passkeySuccess = $state('');
 
+  // Password
+  let hasPassword = $state(false);
+  let showPasswordForm = $state(false);
+  let newPassword = $state('');
+  let confirmNewPassword = $state('');
+  let passwordError = $state('');
+  let passwordSuccess = $state('');
+
   // Allergens
   let allergens: Allergen[] = $state([]);
   let newAllergen = $state('');
@@ -45,6 +53,7 @@
     timezone = data.user.timezone || 'America/New_York';
     loadCredentials();
     loadAllergens();
+    loadAuthMethods();
   });
 
   async function loadCredentials() {
@@ -101,6 +110,34 @@
       body: JSON.stringify({ action: 'remove-passkey', credentialId: id }),
     });
     loadCredentials();
+    loadAuthMethods();
+  }
+
+  async function loadAuthMethods() {
+    const res = await fetch('/api/profile?action=check-auth-methods');
+    const data = await res.json();
+    hasPassword = data.hasPassword ?? false;
+  }
+
+  async function setPassword() {
+    passwordError = '';
+    passwordSuccess = '';
+    if (newPassword !== confirmNewPassword) { passwordError = 'Passwords do not match'; return; }
+    if (newPassword.length < 8) { passwordError = 'Password must be at least 8 characters'; return; }
+
+    const res = await fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set-password', password: newPassword }),
+    });
+    const data = await res.json();
+    if (data.error) { passwordError = data.error; return; }
+
+    passwordSuccess = hasPassword ? 'Password changed' : 'Password set';
+    hasPassword = true;
+    showPasswordForm = false;
+    newPassword = '';
+    confirmNewPassword = '';
   }
 
   async function logout() {
@@ -171,6 +208,40 @@
 
     <div class="section">
       <h2>Sign-in Methods</h2>
+
+      <div class="auth-method">
+        <div class="auth-method-header">
+          <strong>Password</strong>
+          <small>{hasPassword ? 'Set' : 'Not set'}</small>
+        </div>
+        {#if showPasswordForm}
+          {#if passwordError}<div class="error">{passwordError}</div>{/if}
+          {#if passwordSuccess}<div class="success">{passwordSuccess}</div>{/if}
+          <input
+            bind:value={newPassword}
+            type="password"
+            placeholder={hasPassword ? 'New password' : 'Password'}
+            autocomplete="new-password"
+            class="auth-input"
+          />
+          <input
+            bind:value={confirmNewPassword}
+            type="password"
+            placeholder="Confirm password"
+            autocomplete="new-password"
+            class="auth-input"
+          />
+          <div class="auth-actions">
+            <button class="auth-save" onclick={setPassword}>Save</button>
+            <button class="auth-cancel" onclick={() => { showPasswordForm = false; passwordError = ''; passwordSuccess = ''; newPassword = ''; confirmNewPassword = ''; }}>Cancel</button>
+          </div>
+        {:else}
+          <button class="add-btn" onclick={() => { showPasswordForm = true; passwordError = ''; passwordSuccess = ''; }}>
+            {hasPassword ? 'Change Password' : 'Set Password'}
+          </button>
+        {/if}
+      </div>
+
       {#if passkeyError}<div class="error">{passkeyError}</div>{/if}
       {#if passkeySuccess}<div class="success">{passkeySuccess}</div>{/if}
       {#each credentials as cred}
@@ -267,4 +338,13 @@
     padding: 4px 10px; border-radius: 16px; font-size: 13px; font-weight: 500;
   }
   .no-allergens { font-size: 13px; color: #ccc; margin: 0; }
+  .auth-method { padding: 10px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 6px; }
+  .auth-method-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .auth-method-header strong { font-size: 13px; }
+  .auth-method-header small { color: #888; font-size: 11px; }
+  .auth-input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 6px; box-sizing: border-box; }
+  .auth-actions { display: flex; gap: 6px; }
+  .auth-save { flex: 1; padding: 8px; background: #4CAF50; color: #fff; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .auth-save:hover { background: #388E3C; }
+  .auth-cancel { flex: 1; padding: 8px; background: #f5f5f5; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
 </style>

@@ -41,6 +41,7 @@ Test files:
 - `src/lib/timezone.test.ts` — UTC/local conversion, no double-offset (6 tests)
 - `src/lib/entries.test.ts` — entries PATCH logic, date filtering (6 tests)
 - `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)
+- `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation (29 tests)
 
 ## Known Bugs (Fixed)
 
@@ -66,7 +67,7 @@ Test files:
 
 Migrations in `migrations/` directory. Key tables:
 
-- `users` — id, username, timezone
+- `users` — id, username, timezone, **password_hash** (PBKDF2-SHA256, nullable)
 - `sessions` — user_id, token, expires_at
 - `entries` — id, text, image, meal, created_at, user_id, day_notes, **barcode_data** (JSON)
 - `reactions` — id, symptom, severity, notes, created_at, user_id
