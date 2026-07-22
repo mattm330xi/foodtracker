@@ -274,6 +274,10 @@
 
     function onTouchMove(e: TouchEvent) {
       if (!dragging) return;
+      // Suppress the browser's own pull-to-refresh/scroll gesture (Android
+      // Chrome in particular) — without this, dragging the handle down
+      // reloads the page instead of moving the sheet.
+      e.preventDefault();
       currentY = e.touches[0].clientY;
       const dy = Math.max(0, currentY - startY);
       if (sheet) sheet.style.transform = `translateY(${dy}px)`;
@@ -291,7 +295,7 @@
     }
 
     node.addEventListener('touchstart', onTouchStart, { passive: true });
-    node.addEventListener('touchmove', onTouchMove, { passive: true });
+    node.addEventListener('touchmove', onTouchMove, { passive: false });
     node.addEventListener('touchend', onTouchEnd);
 
     return {
