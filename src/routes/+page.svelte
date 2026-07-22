@@ -257,57 +257,6 @@
     if (barcodeTimer) { clearInterval(barcodeTimer); barcodeTimer = null; }
   });
 
-  // Svelte action: drag the sheet-handle down to dismiss its parent bottom sheet.
-  function dragToDismiss(node: HTMLElement, onClose: () => void) {
-    const DISMISS_THRESHOLD = 80;
-    const sheet = node.closest('.modal, .calendar') as HTMLElement | null;
-    let startY = 0;
-    let currentY = 0;
-    let dragging = false;
-
-    function onTouchStart(e: TouchEvent) {
-      dragging = true;
-      startY = e.touches[0].clientY;
-      currentY = startY;
-      if (sheet) sheet.style.transition = 'none';
-    }
-
-    function onTouchMove(e: TouchEvent) {
-      if (!dragging) return;
-      // Suppress the browser's own pull-to-refresh/scroll gesture (Android
-      // Chrome in particular) — without this, dragging the handle down
-      // reloads the page instead of moving the sheet.
-      e.preventDefault();
-      currentY = e.touches[0].clientY;
-      const dy = Math.max(0, currentY - startY);
-      if (sheet) sheet.style.transform = `translateY(${dy}px)`;
-    }
-
-    function onTouchEnd() {
-      if (!dragging) return;
-      dragging = false;
-      const dy = currentY - startY;
-      if (sheet) {
-        sheet.style.transition = '';
-        sheet.style.transform = '';
-      }
-      if (dy > DISMISS_THRESHOLD) onClose();
-    }
-
-    node.addEventListener('touchstart', onTouchStart, { passive: true });
-    node.addEventListener('touchmove', onTouchMove, { passive: false });
-    node.addEventListener('touchend', onTouchEnd);
-
-    return {
-      update(newOnClose: () => void) { onClose = newOnClose; },
-      destroy() {
-        node.removeEventListener('touchstart', onTouchStart);
-        node.removeEventListener('touchmove', onTouchMove);
-        node.removeEventListener('touchend', onTouchEnd);
-      }
-    };
-  }
-
   function selectDate(date: string) {
     selectedDate = date;
     showCalendar = false;
@@ -806,7 +755,6 @@
   {#if showCalendar}
     <div class="calendar-overlay" onclick={() => showCalendar = false}></div>
     <div class="calendar">
-      <div class="sheet-handle" use:dragToDismiss={() => showCalendar = false}></div>
       <div class="calendar-header">
         <button onclick={prevMonth}>‹</button>
         <span>{monthNames[calendarMonth]} {calendarYear}</span>
@@ -903,7 +851,6 @@
   {#if showReactionForm}
     <div class="modal-overlay" onclick={() => showReactionForm = false}></div>
     <div class="modal">
-      <div class="sheet-handle" use:dragToDismiss={() => showReactionForm = false}></div>
       <h3>Log Reaction</h3>
       {#if reactionError}<div class="reaction-error">{reactionError}</div>{/if}
       <input bind:value={reactionSymptom} placeholder="Symptom (e.g. rash, bloating)" class="modal-input" oninput={() => reactionError = ''} />
@@ -994,7 +941,6 @@
   {#if showQuickAdd}
     <div class="modal-overlay" onclick={() => showQuickAdd = false}></div>
     <div class="modal">
-      <div class="sheet-handle" use:dragToDismiss={() => showQuickAdd = false}></div>
       <h3>Quick Add</h3>
       <div class="segmented-tabs">
         <button class="segmented-tab btn-press" class:active={quickAddTab === 'favorites'} onclick={() => setQuickAddTab('favorites')}>⭐ Favorites</button>
@@ -1060,7 +1006,6 @@
   {#if showSaveTemplate}
     <div class="modal-overlay" onclick={() => showSaveTemplate = false}></div>
     <div class="modal">
-      <div class="sheet-handle" use:dragToDismiss={() => showSaveTemplate = false}></div>
       <h3>Save as Template</h3>
       <input bind:value={templateName} placeholder="Template name" class="modal-input" />
       <div class="modal-actions">
@@ -1333,11 +1278,6 @@
   .reaction-title { color: var(--danger); border-bottom-color: var(--danger-border); }
 
   /* ── Sheet overlays & modals ─────────────────────────── */
-  .sheet-handle {
-    width: 36px; height: 4px; margin: 0 auto 16px;
-    background: var(--border-strong); border-radius: 2px;
-    touch-action: none; cursor: grab;
-  }
   .modal-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
     background: rgba(0,0,0,0.4); z-index: 30;
