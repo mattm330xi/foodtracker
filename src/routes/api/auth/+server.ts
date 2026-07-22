@@ -349,8 +349,15 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
       if (!username) return json({ error: 'Username required' }, { status: 400 });
       const clean = username.trim().toLowerCase();
 
-      const existing = await db.prepare('SELECT id FROM users WHERE username = ?').bind(clean).first();
-      if (existing) return json({ error: 'Username already taken' }, { status: 409 });
+      const existing = await db.prepare('SELECT id FROM users WHERE username = ?').bind(clean).first() as any;
+      if (existing) {
+        // Allow re-registration if the user never completed the passkey ceremony
+        const hasCredentials = await db.prepare('SELECT 1 FROM credentials WHERE user_id = ? LIMIT 1').bind(existing.id).first();
+        if (hasCredentials) return json({ error: 'Username already taken' }, { status: 409 });
+        // Clean up orphaned user (no passkey registered)
+        await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(existing.id).run();
+        await db.prepare('DELETE FROM users WHERE id = ?').bind(existing.id).run();
+      }
 
       const result = await db.prepare('INSERT INTO users (username) VALUES (?)').bind(clean).run();
       const userId = result.meta.last_row_id as number;
