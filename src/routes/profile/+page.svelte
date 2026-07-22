@@ -233,10 +233,10 @@
   }
 </script>
 
-<svelte:head><title>Profile - Food Tracker</title></svelte:head>
+<svelte:head><title>Settings - Food Tracker</title></svelte:head>
 
 <main>
-  <header><h1><a href="/" class="back">←</a> Profile</h1></header>
+  <header><h1><a href="/" class="back">←</a> Settings</h1></header>
 
   {#if user}
     <div class="section"><div class="username">{user.username}</div></div>

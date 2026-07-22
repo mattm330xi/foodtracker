@@ -287,7 +287,7 @@
       pendingPassword = '';
 
       if (setPasswordData.error) {
-        error = 'Signed in but failed to set password. You can set it from your profile.';
+        error = 'Signed in but failed to set password. You can set it from Settings.';
         loading = false;
         step = 'idle';
         return;

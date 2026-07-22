@@ -47,6 +47,30 @@
       </div>
     </div>
 
+    {#if stats.dailyCounts?.length > 1}
+      {@const maxVal = Math.max(1, ...stats.dailyCounts.map((d: any) => Math.max(d.foods, d.reactions)))}
+      {@const barW = 100 / stats.dailyCounts.length}
+      <div class="section">
+        <h2>Trend</h2>
+        <svg viewBox="0 0 100 60" preserveAspectRatio="none" class="trend-chart">
+          {#each stats.dailyCounts as d, i}
+            {@const foodH = (d.foods / maxVal) * 54}
+            {@const reactH = (d.reactions / maxVal) * 54}
+            <rect x={i * barW + barW * 0.15} y={56 - foodH} width={barW * 0.32} height={foodH} fill="var(--primary)" rx="0.5" />
+            <rect x={i * barW + barW * 0.53} y={56 - reactH} width={barW * 0.32} height={reactH} fill="var(--danger)" rx="0.5" />
+          {/each}
+        </svg>
+        <div class="trend-labels">
+          <span>{new Date(stats.dailyCounts[0].date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+          <span>{new Date(stats.dailyCounts[stats.dailyCounts.length - 1].date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+        </div>
+        <div class="trend-legend">
+          <span><span class="legend-dot foods"></span> Foods</span>
+          <span><span class="legend-dot reactions"></span> Reactions</span>
+        </div>
+      </div>
+    {/if}
+
     {#if stats.correlations.length > 0}
       <div class="section">
         <h2>Possible triggers</h2>
@@ -107,6 +131,13 @@
   .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 500; }
 
   .section { margin-bottom: 24px; }
+
+  .trend-chart { width: 100%; height: 90px; display: block; }
+  .trend-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .trend-legend { display: flex; gap: 16px; justify-content: center; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+  .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  .legend-dot.foods { background: var(--primary); }
+  .legend-dot.reactions { background: var(--danger); }
   .subtitle { font-size: 12px; color: var(--text-secondary); margin: 0 0 8px; }
 
   .corr-item {

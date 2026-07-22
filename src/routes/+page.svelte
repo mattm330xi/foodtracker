@@ -21,6 +21,12 @@
 
   const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as const;
   const SEVERITY_LABELS = ['', 'Mild', 'Moderate', 'Severe', 'Very Severe'];
+  const MEAL_EMPTY_STATE: Record<string, { icon: string; prompt: string }> = {
+    Breakfast: { icon: '🍳', prompt: 'Add your first breakfast' },
+    Lunch: { icon: '🥪', prompt: 'Log what you had for lunch' },
+    Dinner: { icon: '🍽️', prompt: "Log tonight's dinner" },
+    Snacks: { icon: '🍪', prompt: 'Track a snack' },
+  };
 
   let entries: Entry[] = $state([]);
   let reactions: Reaction[] = $state([]);
@@ -35,11 +41,13 @@
   let deleteType: 'entry' | 'reaction' = $state('entry');
   let daysWithEntries: Set<string> = $state(new Set());
   let daysWithReactions: Set<string> = $state(new Set());
+  let dayEntryCounts: Map<string, number> = $state(new Map());
   let editingEntry: number | null = $state(null);
   let editMeal: string = $state('');
   let editTime: string = $state('');
   let dayNotes: string = $state('');
   let savingNotes = $state(false);
+  let dayNotesExpanded = $state(false);
 
   // Date warning
   let showDateWarning = $state(false);
@@ -82,13 +90,42 @@
 
   // Favorites
   let favorites: any[] = $state([]);
-  let showFavorites = $state(false);
 
   // Templates
   let templates: any[] = $state([]);
-  let showTemplates = $state(false);
   let templateName = $state('');
   let showSaveTemplate = $state(false);
+
+  // Quick Add (Favorites / Templates / Repeat Yesterday)
+  let showQuickAdd = $state(false);
+  let quickAddTab: 'favorites' | 'templates' | 'repeat' = $state('favorites');
+  let yesterdayEntries: any[] = $state([]);
+  let yesterdayLoaded = false;
+
+  function yesterdayDateStr() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toLocaleDateString('en-CA', { timeZone: timezone });
+  }
+
+  async function loadYesterdayEntries() {
+    if (yesterdayLoaded) return;
+    const res = await fetch(`/api/entries?date=${yesterdayDateStr()}`);
+    yesterdayEntries = await res.json();
+    yesterdayLoaded = true;
+  }
+
+  function setQuickAddTab(tab: 'favorites' | 'templates' | 'repeat') {
+    quickAddTab = tab;
+    if (tab === 'repeat') loadYesterdayEntries();
+  }
+
+  async function quickAddYesterdayEntry(entry: any) {
+    text = entry.text || '';
+    imageBase64 = entry.image || '';
+    showQuickAdd = false;
+    await addEntry();
+  }
 
   // View preferences
   let horizontalScroll = $state(false);
@@ -152,11 +189,13 @@
     const res = await fetch(`/api/day-notes?date=${date}`);
     const data = await res.json();
     dayNotes = data.notes || '';
+    dayNotesExpanded = !!dayNotes;
   }
 
   async function loadDaysWithEntries(year: number, month: number) {
     const eSet = new Set<string>();
     const rSet = new Set<string>();
+    const counts = new Map<string, number>();
     for (let day = 1; day <= getDaysInMonth(year, month); day++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const [eRes, rRes] = await Promise.all([
@@ -165,11 +204,12 @@
       ]);
       const eData = await eRes.json();
       const rData = await rRes.json();
-      if (eData.length > 0) eSet.add(dateStr);
+      if (eData.length > 0) { eSet.add(dateStr); counts.set(dateStr, eData.length); }
       if (rData.length > 0) rSet.add(dateStr);
     }
     daysWithEntries = eSet;
     daysWithReactions = rSet;
+    dayEntryCounts = counts;
   }
 
   onMount(async () => {
@@ -223,6 +263,39 @@
     loadEntries(date);
     loadReactions(date);
     loadDayNotes(date);
+  }
+
+  function shiftDay(delta: number) {
+    const d = new Date(`${selectedDate}T00:00:00`);
+    d.setDate(d.getDate() + delta);
+    const newDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (d.getMonth() !== calendarMonth || d.getFullYear() !== calendarYear) {
+      calendarMonth = d.getMonth();
+      calendarYear = d.getFullYear();
+      loadDaysWithEntries(calendarYear, calendarMonth);
+    }
+    selectDate(newDate);
+  }
+
+  let dateSwipeStartX = 0;
+  let dateSwipeStartY = 0;
+  let dateSwipeActive = false;
+
+  function onDateTouchStart(e: TouchEvent) {
+    dateSwipeStartX = e.touches[0].clientX;
+    dateSwipeStartY = e.touches[0].clientY;
+    dateSwipeActive = true;
+  }
+
+  function onDateTouchEnd(e: TouchEvent) {
+    if (!dateSwipeActive) return;
+    dateSwipeActive = false;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - dateSwipeStartX;
+    const dy = touch.clientY - dateSwipeStartY;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      shiftDay(dx < 0 ? 1 : -1);
+    }
   }
 
   function confirmDateWarning() {
@@ -462,7 +535,7 @@
   async function applyFavorite(fav: any) {
     text = fav.text || '';
     imageBase64 = fav.image || '';
-    showFavorites = false;
+    showQuickAdd = false;
   }
 
   async function deleteFavorite(id: number) {
@@ -491,7 +564,7 @@
 
   async function applyTemplate(tpl: any) {
     text = tpl.items;
-    showTemplates = false;
+    showQuickAdd = false;
   }
 
   async function deleteTemplate(id: number) {
@@ -646,11 +719,8 @@
       <a href="/stats" class="icon-btn btn-press" title="Stats" aria-label="Stats">
         <span class="icon-glyph">📈</span><span class="icon-label">Stats</span>
       </a>
-      <button class="icon-btn btn-press" onclick={() => showFavorites = true} title="Favorites" aria-label="Favorites">
-        <span class="icon-glyph">⭐</span><span class="icon-label">Favorites</span>
-      </button>
-      <button class="icon-btn btn-press" onclick={() => showTemplates = true} title="Meal templates" aria-label="Meal templates">
-        <span class="icon-glyph">📋</span><span class="icon-label">Templates</span>
+      <button class="icon-btn btn-press" onclick={() => showQuickAdd = true} title="Quick add" aria-label="Quick add">
+        <span class="icon-glyph">⭐</span><span class="icon-label">Quick Add</span>
       </button>
       <button class="icon-btn btn-press" onclick={() => showBarcode = true} title="Scan barcode" aria-label="Scan barcode">
         <span class="icon-glyph"><svg width="18" height="18" viewBox="0 0 18 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="2" width="2" height="16" fill="currentColor"/><rect x="5" y="2" width="1" height="16" fill="currentColor"/><rect x="8" y="2" width="3" height="16" fill="currentColor"/><rect x="13" y="2" width="1" height="16" fill="currentColor"/><rect x="16" y="2" width="1" height="16" fill="currentColor"/></svg></span><span class="icon-label">Scan</span>
@@ -661,8 +731,8 @@
       <button class="icon-btn btn-press" onclick={() => showCalendar = !showCalendar} title="Calendar" aria-label="Calendar" class:active={showCalendar}>
         <span class="icon-glyph">📅</span><span class="icon-label">Calendar</span>
       </button>
-      <a href="/profile" class="icon-btn btn-press" title="Profile" aria-label="Profile">
-        <span class="icon-glyph">👤</span><span class="icon-label">Profile</span>
+      <a href="/profile" class="icon-btn btn-press" title="Settings" aria-label="Settings">
+        <span class="icon-glyph">⚙️</span><span class="icon-label">Settings</span>
       </a>
     </div>
   </header>
@@ -689,12 +759,17 @@
             {@const isSelected = dateStr === selectedDate}
             {@const hasEntries = daysWithEntries.has(dateStr)}
             {@const hasReaction = daysWithReactions.has(dateStr)}
+            {@const entryCount = dayEntryCounts.get(dateStr) || 0}
+            {@const heatLevel = entryCount === 0 ? 0 : entryCount <= 2 ? 1 : entryCount <= 4 ? 2 : 3}
             <button
               class="day"
               class:today={isToday}
               class:selected={isSelected}
-              class:has-entries={hasEntries && !isToday && !isSelected}
+              class:heat-1={heatLevel === 1 && !isToday && !isSelected}
+              class:heat-2={heatLevel === 2 && !isToday && !isSelected}
+              class:heat-3={heatLevel === 3 && !isToday && !isSelected}
               onclick={() => selectDate(dateStr)}
+              title={entryCount > 0 ? `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'}` : undefined}
             >
               {day}
               {#if hasReaction}
@@ -774,9 +849,9 @@
         <button class="popover-close btn-press" onclick={() => showBarcode = false} aria-label="Close">&times;</button>
       </div>
 
-      <div class="barcode-tabs">
-        <button class="barcode-tab btn-press" class:active={barcodeMode === 'scan'} onclick={() => setBarcodeMode('scan')}>📷 Camera</button>
-        <button class="barcode-tab btn-press" class:active={barcodeMode === 'manual'} onclick={() => setBarcodeMode('manual')}>⌨️ Type Number</button>
+      <div class="segmented-tabs">
+        <button class="segmented-tab btn-press" class:active={barcodeMode === 'scan'} onclick={() => setBarcodeMode('scan')}>📷 Camera</button>
+        <button class="segmented-tab btn-press" class:active={barcodeMode === 'manual'} onclick={() => setBarcodeMode('manual')}>⌨️ Type Number</button>
       </div>
 
       {#if barcodeMode === 'scan'}
@@ -832,52 +907,67 @@
     </div>
   {/if}
 
-  {#if showFavorites}
-    <div class="modal-overlay" onclick={() => showFavorites = false}></div>
+  {#if showQuickAdd}
+    <div class="modal-overlay" onclick={() => showQuickAdd = false}></div>
     <div class="modal">
-      <h3>Favorite Foods</h3>
-      {#if favorites.length === 0}
-        <p class="not-found">No favorites yet. Star an entry to save it.</p>
-      {/if}
-      {#each favorites as fav}
-        <div class="fav-item">
-          <div class="fav-text">
-            <strong>{fav.text?.slice(0, 60) || 'Photo entry'}</strong>
-            <small>Used {fav.use_count}x</small>
-          </div>
-          <div class="fav-actions">
-            <button class="entry-btn" onclick={() => applyFavorite(fav)}>Use</button>
-            <button class="entry-btn delete" onclick={() => deleteFavorite(fav.id)}>✕</button>
-          </div>
-        </div>
-      {/each}
-      <div class="modal-actions">
-        <button class="confirm-cancel" onclick={() => showFavorites = false}>Close</button>
+      <h3>Quick Add</h3>
+      <div class="segmented-tabs">
+        <button class="segmented-tab btn-press" class:active={quickAddTab === 'favorites'} onclick={() => setQuickAddTab('favorites')}>⭐ Favorites</button>
+        <button class="segmented-tab btn-press" class:active={quickAddTab === 'templates'} onclick={() => setQuickAddTab('templates')}>📋 Templates</button>
+        <button class="segmented-tab btn-press" class:active={quickAddTab === 'repeat'} onclick={() => setQuickAddTab('repeat')}>🔁 Yesterday</button>
       </div>
-    </div>
-  {/if}
 
-  {#if showTemplates}
-    <div class="modal-overlay" onclick={() => showTemplates = false}></div>
-    <div class="modal">
-      <h3>Meal Templates</h3>
-      {#if templates.length === 0}
-        <p class="not-found">No templates saved yet.</p>
+      {#if quickAddTab === 'favorites'}
+        {#if favorites.length === 0}
+          <p class="not-found">No favorites yet. Star an entry to save it.</p>
+        {/if}
+        {#each favorites as fav}
+          <div class="fav-item">
+            <div class="fav-text">
+              <strong>{fav.text?.slice(0, 60) || 'Photo entry'}</strong>
+              <small>Used {fav.use_count}x</small>
+            </div>
+            <div class="fav-actions">
+              <button class="entry-btn btn-press" onclick={() => applyFavorite(fav)}>Use</button>
+              <button class="entry-btn delete btn-press" onclick={() => deleteFavorite(fav.id)}>✕</button>
+            </div>
+          </div>
+        {/each}
+      {:else if quickAddTab === 'templates'}
+        {#if templates.length === 0}
+          <p class="not-found">No templates saved yet.</p>
+        {/if}
+        {#each templates as tpl}
+          <div class="fav-item">
+            <div class="fav-text">
+              <strong>{tpl.name}</strong>
+              <small>{tpl.items?.split('\n').length || 0} items</small>
+            </div>
+            <div class="fav-actions">
+              <button class="entry-btn btn-press" onclick={() => applyTemplate(tpl)}>Use</button>
+              <button class="entry-btn delete btn-press" onclick={() => deleteTemplate(tpl.id)}>✕</button>
+            </div>
+          </div>
+        {/each}
+      {:else}
+        {#if yesterdayEntries.length === 0}
+          <p class="not-found">No entries logged yesterday.</p>
+        {/if}
+        {#each yesterdayEntries as ye}
+          <div class="fav-item">
+            <div class="fav-text">
+              <strong>{ye.text?.slice(0, 60) || 'Photo entry'}</strong>
+              <small>{ye.meal}</small>
+            </div>
+            <div class="fav-actions">
+              <button class="entry-btn btn-press" onclick={() => quickAddYesterdayEntry(ye)}>+ Add</button>
+            </div>
+          </div>
+        {/each}
       {/if}
-      {#each templates as tpl}
-        <div class="fav-item">
-          <div class="fav-text">
-            <strong>{tpl.name}</strong>
-            <small>{tpl.items?.split('\n').length || 0} items</small>
-          </div>
-          <div class="fav-actions">
-            <button class="entry-btn" onclick={() => applyTemplate(tpl)}>Use</button>
-            <button class="entry-btn delete" onclick={() => deleteTemplate(tpl.id)}>✕</button>
-          </div>
-        </div>
-      {/each}
+
       <div class="modal-actions">
-        <button class="confirm-cancel" onclick={() => showTemplates = false}>Close</button>
+        <button class="confirm-cancel btn-press" onclick={() => showQuickAdd = false}>Close</button>
       </div>
     </div>
   {/if}
@@ -895,7 +985,13 @@
   {/if}
 
   <div class="date-header">
-    <h2>{formatDateDisplay(selectedDate)}</h2>
+    <button class="day-nav-btn btn-press" onclick={() => shiftDay(-1)} aria-label="Previous day">‹</button>
+    <h2
+      class="date-header-title"
+      ontouchstart={onDateTouchStart}
+      ontouchend={onDateTouchEnd}
+    >{formatDateDisplay(selectedDate)}</h2>
+    <button class="day-nav-btn btn-press" onclick={() => shiftDay(1)} aria-label="Next day">›</button>
   </div>
 
   <div class="actions">
@@ -915,16 +1011,22 @@
     <button class="template-save-btn" onclick={() => showSaveTemplate = true}>Save day as template</button>
   {/if}
 
-  <div class="day-notes">
-    <label>Day Notes</label>
-    <textarea
-      bind:value={dayNotes}
-      placeholder="How are you feeling today? Any symptoms?"
-      rows="2"
-      onblur={saveDayNotes}
-    ></textarea>
-    {#if savingNotes}<span class="saving">Saving...</span>{/if}
-  </div>
+  {#if dayNotesExpanded || dayNotes}
+    <div class="day-notes">
+      <label>Day Notes</label>
+      <textarea
+        bind:value={dayNotes}
+        placeholder="How are you feeling today? Any symptoms?"
+        rows="2"
+        onblur={saveDayNotes}
+      ></textarea>
+      {#if savingNotes}<span class="saving">Saving...</span>{/if}
+    </div>
+  {:else}
+    <button class="day-notes-collapsed btn-press" onclick={() => dayNotesExpanded = true}>
+      <span>📝</span> Add day notes (symptoms, how you're feeling)
+    </button>
+  {/if}
 
   <div class="entries">
     {#each MEALS as meal}
@@ -933,7 +1035,10 @@
         <h3 class="meal-title">{meal}</h3>
         <div class="meal-entries" class:meal-entries-hscroll={horizontalScroll}>
         {#if mealEntries.length === 0}
-          <div class="no-entries">No entries</div>
+          <div class="no-entries">
+            <span class="no-entries-icon">{MEAL_EMPTY_STATE[meal].icon}</span>
+            <span>{MEAL_EMPTY_STATE[meal].prompt}</span>
+          </div>
         {/if}
         {#each mealEntries as entry (entry.id)}
           {@const entryBd = entry.barcode_data ? JSON.parse(entry.barcode_data) : null}
@@ -1045,9 +1150,16 @@
   .icon-label { font-size: 9px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.02em; }
 
   .date-header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
   }
+  .date-header-title { flex: 1; text-align: center; touch-action: pan-y; user-select: none; }
+  .day-nav-btn {
+    background: var(--muted-bg); border: none; color: var(--text-secondary);
+    font-size: 20px; line-height: 1; width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .day-nav-btn:hover { background: var(--primary-bg); color: var(--primary-dark); }
 
   .actions { display: flex; gap: 8px; margin-bottom: 12px; }
   button { padding: 10px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--muted-bg); cursor: pointer; font-size: 14px; transition: transform 0.1s, opacity 0.1s, background 0.15s; }
@@ -1058,6 +1170,12 @@
   .submit { width: 100%; background: var(--text-primary); color: var(--bg); border: none; font-weight: 600; margin-top: 4px; }
 
   .day-notes { margin: 16px 0; padding: 12px; background: var(--warning-bg); border-radius: var(--radius-md); border: 1px solid var(--warning-border); }
+  .day-notes-collapsed {
+    display: flex; align-items: center; gap: 8px; width: 100%; margin: 16px 0;
+    padding: 10px 12px; background: var(--muted-bg); border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-md); color: var(--text-secondary); font-size: 13px; text-align: left;
+  }
+  .day-notes-collapsed:hover { border-color: var(--warning); color: var(--text-primary); }
   .day-notes label { font-size: 12px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 4px; }
   .day-notes textarea { border-color: var(--warning-border); background: var(--surface); margin-bottom: 0; }
   .saving { font-size: 11px; color: var(--text-tertiary); }
@@ -1067,7 +1185,8 @@
   .meal-entries-hscroll .entry { flex: 0 0 260px; scroll-snap-align: start; margin-bottom: 0; }
   .meal-entries-hscroll .no-entries { flex: 0 0 auto; }
   .meal-title { font-size: 13px; font-weight: 600; color: var(--primary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--primary-bg); }
-  .no-entries { color: var(--text-tertiary); font-size: 13px; padding: 4px 0; }
+  .no-entries { display: flex; align-items: center; gap: 8px; color: var(--text-tertiary); font-size: 13px; padding: 10px 0; }
+  .no-entries-icon { font-size: 20px; opacity: 0.7; }
 
   .entry { background: var(--surface); border-radius: var(--radius-md); padding: 12px; margin-bottom: 8px; box-shadow: var(--shadow-sm); transition: transform 0.1s, box-shadow 0.2s; }
   .entry:active { transform: scale(0.99); }
@@ -1155,12 +1274,12 @@
   }
   .popover-close:hover { background: var(--border-strong); }
 
-  .barcode-tabs { display: flex; gap: 4px; margin-bottom: 14px; background: var(--muted-bg); border-radius: var(--radius-sm); padding: 3px; }
-  .barcode-tab {
+  .segmented-tabs { display: flex; gap: 4px; margin-bottom: 14px; background: var(--muted-bg); border-radius: var(--radius-sm); padding: 3px; }
+  .segmented-tab {
     flex: 1; padding: 10px 8px; font-size: 14px; border: none; background: none;
     border-radius: 6px; font-weight: 600; color: var(--text-secondary); transition: background 0.15s, color 0.15s;
   }
-  .barcode-tab.active { background: var(--surface); color: var(--text-primary); box-shadow: var(--shadow-xs); }
+  .segmented-tab.active { background: var(--surface); color: var(--text-primary); box-shadow: var(--shadow-xs); }
   .scan-hint { text-align: center; color: var(--text-tertiary); font-size: 12px; margin: 8px 0 0; }
 
   .manual-barcode-panel { padding: 4px 0 2px; }
@@ -1239,7 +1358,10 @@
   .day.empty { cursor: default; }
   .day.today { font-weight: 700; color: #fff; background: var(--primary); box-shadow: 0 2px 8px rgba(52,199,89,0.35); }
   .day.selected { background: var(--text-primary); color: var(--bg); font-weight: 600; }
-  .day.has-entries { background: var(--primary-bg); font-weight: 500; }
+  .day.heat-1 { background: var(--primary-bg); font-weight: 500; }
+  .day.heat-2 { background: var(--primary-bg-strong); font-weight: 500; }
+  .day.heat-3 { background: var(--primary-dark); color: #fff; font-weight: 600; }
+  .day.heat-3 .dot { background: #fff; }
   .day:hover:not(.empty):not(.selected):not(.today) { background: var(--border); }
   .dot { display: block; width: 4px; height: 4px; border-radius: 50%; background: var(--primary); margin: 2px auto 0; }
   .reaction-dot { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); margin: 2px auto 0; }

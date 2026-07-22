@@ -120,7 +120,7 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 
 ## Allergen System
 
-- **Profile page** (`/profile`): Add/remove allergens (comma-separated input supported)
+- **Settings page** (`/profile`): Add/remove allergens (comma-separated input supported)
 - **Table:** `user_allergens` — one row per ingredient per user, UNIQUE constraint
 - **API:** `GET/POST/DELETE /api/allergens` — CRUD, requires auth
 - **Barcode scan:** `/api/barcode` reads session cookie, queries allergens, returns `warnings` array
@@ -140,12 +140,12 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 ## Design System (src/app.css)
 
 - **Never hardcode colors, radii, or shadows in component `<style>` blocks** — use the CSS custom properties defined in `src/app.css` (`--bg`, `--surface`, `--surface-elevated`, `--text-primary/secondary/tertiary`, `--primary`, `--danger`, `--warning`, `--accent`, `--radius-xs/sm/md/lg/xl/full`, `--shadow-xs/sm/md/lg/sheet`, `--spring`, `--ease-out`). If a new color/shape is needed, add a token to `:root` (and its dark-mode override) rather than hardcoding.
-- **Dark mode:** overrides live under `[data-theme="dark"]` in `app.css`. The theme is applied via a `data-theme` attribute on `<html>`, toggled from the profile page (Light/Dark/System), persisted in `localStorage`. Any new token must get both a light (`:root`) and dark (`[data-theme="dark"]`) value.
+- **Dark mode:** overrides live under `[data-theme="dark"]` in `app.css`. The theme is applied via a `data-theme` attribute on `<html>`, toggled from the Settings page (Light/Dark/System), persisted in `localStorage`. Any new token must get both a light (`:root`) and dark (`[data-theme="dark"]`) value.
 - **Bottom sheets, not centered dialogs:** modals use `sheet-in`/`sheet-out` keyframes (translateY) with the `--spring` easing curve, plus `overlay-in`/`overlay-out` for the backdrop.
 - **Press feedback:** apply the `.btn-press` utility class (scale to 0.97 on `:active`) to tappable elements instead of writing bespoke `:active` rules.
 - **Skeleton loading:** use `.skeleton` / `.skeleton-text` / `.skeleton-circle` / `.skeleton-img` instead of "Loading..." text — match the real DOM layout so content doesn't jump in.
 - **Touch/PWA polish:** `-webkit-tap-highlight-color: transparent` and `overscroll-behavior-y: none` are set globally in `app.css` — don't re-add per-component.
-- **Horizontal scroll toggle:** meal-section layout (vertical list vs. horizontal snap-scroll) is a per-user preference stored in `localStorage`, toggled from profile. Default is vertical.
+- **Meal view toggle:** meal-section layout (vertical list vs. horizontal snap-scroll carousel) is a per-user preference stored in `localStorage`, toggled from Settings. Without an explicit saved preference, it defaults to carousel on mobile widths (`matchMedia('(max-width: 700px)')`) and list on desktop. The carousel only scrolls the entry cards — each meal's section header (Breakfast/Lunch/Dinner/Snacks) stays fixed above it.
 
 ## Svelte 5 Conventions
 

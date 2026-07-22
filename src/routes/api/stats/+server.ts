@@ -26,6 +26,23 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
     foodsByDate[f.date].push(f.text);
   }
 
+  const reactionCountByDate: Record<string, number> = {};
+  for (const r of reacts.results as any[]) {
+    reactionCountByDate[r.date] = (reactionCountByDate[r.date] || 0) + 1;
+  }
+
+  const dailyCounts: Array<{ date: string; foods: number; reactions: number }> = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    dailyCounts.push({
+      date: dateStr,
+      foods: foodsByDate[dateStr]?.length || 0,
+      reactions: reactionCountByDate[dateStr] || 0,
+    });
+  }
+
   const correlations: Array<{ food: string; reactionCount: number; dates: string[] }> = [];
   const foodReactionMap: Record<string, { count: number; dates: string[] }> = {};
 
@@ -51,5 +68,6 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
     totalReactions: (reacts.results as any[]).length,
     reactions: reacts.results,
     correlations: correlations.slice(0, 10),
+    dailyCounts,
   });
 };

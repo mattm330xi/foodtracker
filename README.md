@@ -8,20 +8,20 @@ A progressive web app for tracking everything you eat — photos, notes, organiz
 
 - **📷 Camera capture** — snap photos of your meals directly from your phone
 - **📝 Notes** — add text notes to each entry (use your phone's built-in voice-to-text)
-- **📅 Calendar view** — browse entries by date with green dots (entries) and red dots (reactions). Add entries to past or future dates with a confirmation prompt.
+- **📅 Calendar view** — browse entries by date with a heatmap tint (shaded by entry count) plus green dots (entries) and red dots (reactions). Add entries to past or future dates with a confirmation prompt.
+- **↔️ Swipe/arrow day navigation** — swipe left/right or tap the arrows next to the date heading to move between days
 - **🍽️ Meal slots** — entries auto-assigned to Breakfast/Lunch/Dinner/Snacks based on your timezone
 - **⚠️ Reaction logging** — log symptoms with severity (Mild/Moderate/Severe/Very Severe) and notes
-- **📊 Stats page** — food-reaction correlations, entry/reaction counts over selectable periods
-- **⭐ Favorites** — star entries to save them for quick re-add
-- **📋 Meal templates** — save a day as a template and re-use it
+- **📊 Stats page** — food-reaction correlations, entry/reaction counts, and a daily trend chart over selectable periods
+- **⭐ Quick Add** — one sheet with tabs for Favorites, Meal Templates, and one-tap "repeat yesterday" entries
 - **📷 Barcode scanner** — scan barcodes with your camera, look up products via Open Food Facts
-- **⚠️ Allergen warnings** — set your allergens in profile, get warnings when scanned products contain them
+- **⚠️ Allergen warnings** — set your allergens in Settings, get warnings when scanned products contain them
 - **🔒 Authentication** — passkeys (Face ID / Touch ID) and/or passwords, your choice
-- **👤 Profile** — manage timezone, allergens, passkeys, sign out
+- **⚙️ Settings** — manage timezone, allergens, passkeys, dark mode, meal view, sign out
 - **📱 Installable PWA** — add to your home screen with guided install prompts
 - **💾 Cloud storage** — all data stored in Cloudflare D1 (SQLite at the edge)
-- **🌗 Dark mode** — light/dark/system theme toggle in profile, backed by CSS custom properties
-- **↔️ Horizontal scroll view** — optional carousel layout for meal sections, toggle in profile
+- **🌗 Dark mode** — light/dark/system theme toggle in Settings, backed by CSS custom properties
+- **↔️ Carousel meal view** — meal sections default to a horizontal carousel on mobile and a vertical list on desktop, overridable in Settings
 
 ## Tech Stack
 
@@ -114,7 +114,7 @@ src/
 ├── hooks.server.ts             # Session validation middleware
 ├── routes/
 │   ├── +layout.svelte          # Service worker registration + PWA install banner
-│   ├── +page.svelte            # Main UI (entries, reactions, calendar, favorites, templates, barcode scanner with allergen warnings)
+│   ├── +page.svelte            # Main UI (entries, reactions, calendar heatmap, Quick Add sheet, barcode scanner with allergen warnings)
 │   ├── login/+page.svelte      # Passkey + password login/register
 │   ├── profile/+page.svelte    # Timezone, allergens, sign-in methods, sign out
 │   ├── stats/+page.svelte      # Food-reaction correlation stats
@@ -179,11 +179,11 @@ src/
 ## Design System
 
 - **Tokens:** `src/app.css` defines all colors, radii, shadows, and easing curves as CSS custom properties (`--bg`, `--surface`, `--primary`, `--radius-md`, `--shadow-sm`, `--spring`, etc). No component should hardcode a hex color — reference a token instead.
-- **Dark mode:** `[data-theme="dark"]` overrides the token values. Toggled from the profile page (Light/Dark/System), stored in `localStorage` and applied via a `data-theme` attribute on `<html>`.
+- **Dark mode:** `[data-theme="dark"]` overrides the token values. Toggled from the Settings page (Light/Dark/System), stored in `localStorage` and applied via a `data-theme` attribute on `<html>`.
 - **Bottom sheets:** Modals slide up from the bottom using the `sheet-in`/`sheet-out` keyframes with a spring easing curve (`--spring`), rather than centered dialogs.
 - **Press feedback:** `.btn-press` utility class scales interactive elements to `0.97` on `:active` for native-feeling touch feedback.
 - **Skeleton loading:** `.skeleton` / `.skeleton-text` / `.skeleton-circle` utilities replace "Loading..." text with placeholders matching the real layout.
-- **Horizontal scroll toggle:** Meal sections default to vertical lists; users can opt into a horizontal snap-scroll layout from profile, persisted in `localStorage`.
+- **Meal view toggle:** Meal sections default to a horizontal snap-scroll carousel on mobile widths and a vertical list on desktop; either can be overridden from Settings, persisted in `localStorage`. Each meal's section header stays fixed while its entries scroll horizontally.
 
 ## Deployment Notes
 
