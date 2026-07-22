@@ -131,16 +131,58 @@
   export { startScanner, stopScanner };
 </script>
 
-<video id={elementId} class="barcode-video" playsinline muted></video>
+<div class="barcode-viewport">
+  <video id={elementId} class="barcode-video" playsinline muted></video>
+  {#if isScanning}
+    <div class="scan-frame">
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+      <span class="scan-line"></span>
+    </div>
+  {/if}
+</div>
 {#if isScanning}<span data-testid="scanning">Scanning</span>{/if}
 {#if cameraError}<span data-testid="result">{cameraError}</span>{/if}
 
 <style>
+  .barcode-viewport {
+    position: relative;
+    width: 100%;
+    border-radius: var(--radius-md, 12px);
+    overflow: hidden;
+    background: #000;
+  }
   .barcode-video {
     width: 100%;
     max-width: 100%;
-    border-radius: 8px;
-    background: #000;
     display: block;
+  }
+  .scan-frame {
+    position: absolute;
+    inset: 14% 8%;
+    pointer-events: none;
+  }
+  .corner {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border: 3px solid var(--primary, #34C759);
+  }
+  .corner.tl { top: 0; left: 0; border-right: none; border-bottom: none; border-radius: 6px 0 0 0; }
+  .corner.tr { top: 0; right: 0; border-left: none; border-bottom: none; border-radius: 0 6px 0 0; }
+  .corner.bl { bottom: 0; left: 0; border-right: none; border-top: none; border-radius: 0 0 0 6px; }
+  .corner.br { bottom: 0; right: 0; border-left: none; border-top: none; border-radius: 0 0 6px 0; }
+  .scan-line {
+    position: absolute;
+    left: 2%;
+    right: 2%;
+    height: 2px;
+    background: var(--primary, #34C759);
+    box-shadow: 0 0 8px 1px var(--primary, #34C759);
+    animation: scan-sweep 1.8s ease-in-out infinite;
+  }
+  @keyframes scan-sweep {
+    0%, 100% { top: 4%; opacity: 0.9; }
+    50% { top: 92%; opacity: 0.9; }
   }
 </style>

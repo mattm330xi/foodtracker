@@ -65,7 +65,20 @@
   let isBusy = false;
   let scannerComponent: any = $state(null);
   let manualBarcode = $state('');
+  let barcodeMode: 'scan' | 'manual' = $state('scan');
+  let manualBarcodeInput: HTMLInputElement | null = $state(null);
   const BARCODE_TIMEOUT_MS = 5000;
+
+  function setBarcodeMode(mode: 'scan' | 'manual') {
+    if (mode === barcodeMode) return;
+    barcodeMode = mode;
+    if (mode === 'manual') {
+      scannerComponent?.stopScanner();
+      tick().then(() => manualBarcodeInput?.focus());
+    } else {
+      tick().then(() => scannerComponent?.startScanner());
+    }
+  }
 
   // Favorites
   let favorites: any[] = $state([]);
@@ -170,7 +183,10 @@
     username = authData.user.username;
     selectedDate = today();
     skipPastWarning = localStorage.getItem('ft_skipPastWarning') === 'true';
-    horizontalScroll = localStorage.getItem('ft_horizontalScroll') === 'true';
+    const savedScrollPref = localStorage.getItem('ft_horizontalScroll');
+    horizontalScroll = savedScrollPref !== null
+      ? savedScrollPref === 'true'
+      : window.matchMedia('(max-width: 700px)').matches;
 
     loadEntries(selectedDate);
     loadReactions(selectedDate);
@@ -188,6 +204,8 @@
       scannedProduct = null;
       scannerStatus = 'idle';
       errorMessage = '';
+      barcodeMode = 'scan';
+      manualBarcode = '';
       tick().then(() => scannerComponent?.startScanner());
       return () => { scannerComponent?.stopScanner(); };
     }
@@ -625,13 +643,27 @@
       {#if username}<span class="username">@{username}</span>{/if}
     </div>
     <div class="header-btns">
-      <a href="/stats" class="icon-btn">📈</a>
-      <button class="icon-btn" onclick={() => showFavorites = true}>⭐</button>
-      <button class="icon-btn" onclick={() => showTemplates = true}>📋</button>
-      <button class="icon-btn" onclick={() => showBarcode = true} title="Scan barcode"><svg width="18" height="18" viewBox="0 0 18 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="2" width="2" height="16" fill="currentColor"/><rect x="5" y="2" width="1" height="16" fill="currentColor"/><rect x="8" y="2" width="3" height="16" fill="currentColor"/><rect x="13" y="2" width="1" height="16" fill="currentColor"/><rect x="16" y="2" width="1" height="16" fill="currentColor"/></svg></button>
-      <button class="icon-btn" onclick={() => showReactionForm = true}>⚠️</button>
-      <button class="icon-btn" onclick={() => showCalendar = !showCalendar}>📅</button>
-      <a href="/profile" class="icon-btn">👤</a>
+      <a href="/stats" class="icon-btn btn-press" title="Stats" aria-label="Stats">
+        <span class="icon-glyph">📈</span><span class="icon-label">Stats</span>
+      </a>
+      <button class="icon-btn btn-press" onclick={() => showFavorites = true} title="Favorites" aria-label="Favorites">
+        <span class="icon-glyph">⭐</span><span class="icon-label">Favorites</span>
+      </button>
+      <button class="icon-btn btn-press" onclick={() => showTemplates = true} title="Meal templates" aria-label="Meal templates">
+        <span class="icon-glyph">📋</span><span class="icon-label">Templates</span>
+      </button>
+      <button class="icon-btn btn-press" onclick={() => showBarcode = true} title="Scan barcode" aria-label="Scan barcode">
+        <span class="icon-glyph"><svg width="18" height="18" viewBox="0 0 18 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="2" width="2" height="16" fill="currentColor"/><rect x="5" y="2" width="1" height="16" fill="currentColor"/><rect x="8" y="2" width="3" height="16" fill="currentColor"/><rect x="13" y="2" width="1" height="16" fill="currentColor"/><rect x="16" y="2" width="1" height="16" fill="currentColor"/></svg></span><span class="icon-label">Scan</span>
+      </button>
+      <button class="icon-btn btn-press" onclick={() => showReactionForm = true} title="Log reaction" aria-label="Log reaction">
+        <span class="icon-glyph">⚠️</span><span class="icon-label">Reaction</span>
+      </button>
+      <button class="icon-btn btn-press" onclick={() => showCalendar = !showCalendar} title="Calendar" aria-label="Calendar" class:active={showCalendar}>
+        <span class="icon-glyph">📅</span><span class="icon-label">Calendar</span>
+      </button>
+      <a href="/profile" class="icon-btn btn-press" title="Profile" aria-label="Profile">
+        <span class="icon-glyph">👤</span><span class="icon-label">Profile</span>
+      </a>
     </div>
   </header>
 
@@ -736,24 +768,43 @@
 
   {#if showBarcode}
     <div class="modal-overlay" onclick={() => { showBarcode = false; }}></div>
-    <div class="modal barcode-modal">
-      <h3>Scan Barcode</h3>
-      <BarcodeScanner bind:this={scannerComponent} onBarcode={handleBarcodeDetected} />
-      <div class="manual-barcode-row">
-        <input
-          bind:value={manualBarcode}
-          placeholder="Or type barcode number"
-          type="text"
-          inputmode="numeric"
-          class="manual-barcode-input"
-          onkeydown={(e) => { if (e.key === 'Enter' && manualBarcode.trim()) handleBarcodeDetected(manualBarcode.trim()); }}
-        />
-        <button
-          class="manual-barcode-btn"
-          disabled={!manualBarcode.trim() || isBusy}
-          onclick={() => handleBarcodeDetected(manualBarcode.trim())}
-        >Look Up</button>
+    <div class="popover barcode-popover">
+      <div class="popover-header">
+        <h3>Scan Barcode</h3>
+        <button class="popover-close btn-press" onclick={() => showBarcode = false} aria-label="Close">&times;</button>
       </div>
+
+      <div class="barcode-tabs">
+        <button class="barcode-tab btn-press" class:active={barcodeMode === 'scan'} onclick={() => setBarcodeMode('scan')}>📷 Camera</button>
+        <button class="barcode-tab btn-press" class:active={barcodeMode === 'manual'} onclick={() => setBarcodeMode('manual')}>⌨️ Type Number</button>
+      </div>
+
+      {#if barcodeMode === 'scan'}
+        <BarcodeScanner bind:this={scannerComponent} onBarcode={handleBarcodeDetected} />
+        <p class="scan-hint">Center the barcode in the frame</p>
+      {:else}
+        <div class="manual-barcode-panel">
+          <label for="manual-barcode-input" class="manual-label">Barcode number</label>
+          <div class="manual-barcode-row">
+            <input
+              id="manual-barcode-input"
+              bind:this={manualBarcodeInput}
+              bind:value={manualBarcode}
+              placeholder="e.g. 0123456789012"
+              type="text"
+              inputmode="numeric"
+              class="manual-barcode-input"
+              onkeydown={(e) => { if (e.key === 'Enter' && manualBarcode.trim()) handleBarcodeDetected(manualBarcode.trim()); }}
+            />
+            <button
+              class="manual-barcode-btn btn-press"
+              disabled={!manualBarcode.trim() || isBusy}
+              onclick={() => handleBarcodeDetected(manualBarcode.trim())}
+            >Look Up</button>
+          </div>
+        </div>
+      {/if}
+
       {#if scannerStatus === 'looking_up'}
         <p class="not-found">Looking up product... ({barcodeElapsed}s)</p>
       {:else if scannerStatus === 'success' && scannedProduct}
@@ -775,8 +826,8 @@
         </div>
       {:else if scannerStatus === 'error'}
         <p class="not-found" style="color:var(--danger)">{errorMessage}</p>
-        <button class="submit" style="margin-top:8px" onclick={() => { scannerComponent?.startScanner(); scannerStatus = 'idle'; }}>Try Again</button>
-        <button class="submit" style="margin-top:8px" onclick={() => { text = `Scanned barcode: (unknown product)`; showBarcode = false; }}>Manual Entry</button>
+        <button class="submit btn-press" style="margin-top:8px" onclick={() => { scannerComponent?.startScanner(); scannerStatus = 'idle'; }}>Try Again</button>
+        <button class="submit btn-press" style="margin-top:8px" onclick={() => { text = `Scanned barcode: (unknown product)`; showBarcode = false; }}>Log without product info</button>
       {/if}
     </div>
   {/if}
@@ -856,7 +907,7 @@
     <img src={imageBase64} alt="Preview" class="preview" />
   {/if}
 
-  <textarea bind:value={text} placeholder="What did you eat?" rows="2"></textarea>
+  <textarea bind:value={text} placeholder="Describe your photo, what did you eat?" rows="2"></textarea>
 
   <button class="submit" onclick={addEntry}>Add Entry</button>
 
@@ -878,8 +929,9 @@
   <div class="entries">
     {#each MEALS as meal}
       {@const mealEntries = groupedEntries()[meal]}
-      <div class="meal-section" class:meal-section-hscroll={horizontalScroll}>
+      <div class="meal-section">
         <h3 class="meal-title">{meal}</h3>
+        <div class="meal-entries" class:meal-entries-hscroll={horizontalScroll}>
         {#if mealEntries.length === 0}
           <div class="no-entries">No entries</div>
         {/if}
@@ -939,6 +991,7 @@
             {/if}
           </div>
         {/each}
+        </div>
       </div>
     {/each}
   </div>
@@ -974,10 +1027,22 @@
   header { display: flex; flex-direction: column; gap: 8px; }
   .header-left { display: flex; align-items: baseline; gap: 8px; }
   .username { font-size: 12px; color: var(--text-secondary); }
-  .header-btns { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
-  .icon-btn { background: none; border: none; font-size: 20px; padding: 6px 8px; border-radius: var(--radius-sm); text-decoration: none; display: inline-flex; transition: background 0.15s, transform 0.1s; }
-  .icon-btn:hover { background: var(--border); }
-  .icon-btn:active { transform: scale(0.92); }
+  .header-btns {
+    display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;
+    background: var(--muted-bg); border-radius: var(--radius-lg);
+    padding: 6px; box-shadow: var(--shadow-xs);
+  }
+  .icon-btn {
+    background: var(--surface); border: none; color: var(--text-primary);
+    text-decoration: none; display: inline-flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px;
+    width: 56px; padding: 8px 4px 6px; border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xs); transition: background 0.15s, box-shadow 0.15s;
+  }
+  .icon-btn:hover { background: var(--primary-bg); }
+  .icon-btn.active { background: var(--primary-bg); box-shadow: inset 0 0 0 1.5px var(--primary); }
+  .icon-glyph { font-size: 19px; line-height: 1; display: inline-flex; }
+  .icon-label { font-size: 9px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.02em; }
 
   .date-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -998,9 +1063,9 @@
   .saving { font-size: 11px; color: var(--text-tertiary); }
 
   .meal-section { margin-bottom: 16px; }
-  .meal-section-hscroll { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding-bottom: 8px; margin-bottom: 8px; }
-  .meal-section-hscroll .entry { flex: 0 0 260px; scroll-snap-align: start; margin-bottom: 0; }
-  .meal-section-hscroll .no-entries { flex: 0 0 auto; }
+  .meal-entries-hscroll { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; padding-bottom: 8px; }
+  .meal-entries-hscroll .entry { flex: 0 0 260px; scroll-snap-align: start; margin-bottom: 0; }
+  .meal-entries-hscroll .no-entries { flex: 0 0 auto; }
   .meal-title { font-size: 13px; font-weight: 600; color: var(--primary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--primary-bg); }
   .no-entries { color: var(--text-tertiary); font-size: 13px; padding: 4px 0; }
 
@@ -1073,14 +1138,40 @@
   .modal-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-sizing: border-box; margin-bottom: 8px; font-size: 15px; background: var(--surface); }
   .modal-actions { display: flex; gap: 8px; margin-top: 12px; }
   .reaction-error { background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger); padding: 8px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 8px; }
-  .barcode-reader { width: 100%; margin-bottom: 12px; }
-  .barcode-reader :global(video) { border-radius: var(--radius-md); }
+  /* ── Barcode popover ──────────────────────────────────── */
+  .popover {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: var(--surface); border-radius: var(--radius-lg);
+    padding: 20px; box-shadow: var(--shadow-lg); z-index: 40;
+    width: min(420px, 92vw); max-height: 88vh; overflow-y: auto;
+    animation: fade-in 0.25s var(--spring);
+  }
+  .popover-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .popover-header h3 { margin: 0; }
+  .popover-close {
+    width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; border: none;
+    background: var(--muted-bg); color: var(--text-secondary); font-size: 20px;
+    display: flex; align-items: center; justify-content: center; line-height: 1;
+  }
+  .popover-close:hover { background: var(--border-strong); }
+
+  .barcode-tabs { display: flex; gap: 4px; margin-bottom: 14px; background: var(--muted-bg); border-radius: var(--radius-sm); padding: 3px; }
+  .barcode-tab {
+    flex: 1; padding: 10px 8px; font-size: 14px; border: none; background: none;
+    border-radius: 6px; font-weight: 600; color: var(--text-secondary); transition: background 0.15s, color 0.15s;
+  }
+  .barcode-tab.active { background: var(--surface); color: var(--text-primary); box-shadow: var(--shadow-xs); }
+  .scan-hint { text-align: center; color: var(--text-tertiary); font-size: 12px; margin: 8px 0 0; }
+
+  .manual-barcode-panel { padding: 4px 0 2px; }
+  .manual-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+
   .barcode-result { margin-top: 12px; padding: 12px; background: var(--muted-bg); border-radius: var(--radius-md); }
-  .manual-barcode-row { display: flex; gap: 6px; margin-top: 10px; }
-  .manual-barcode-input { flex: 1; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 15px; }
+  .manual-barcode-row { display: flex; gap: 8px; }
+  .manual-barcode-input { flex: 1; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 16px; background: var(--surface); }
   .manual-barcode-btn {
-    padding: 10px 14px; background: var(--text-primary); color: var(--bg); border: none;
-    border-radius: var(--radius-sm); font-size: 13px; white-space: nowrap; font-weight: 600;
+    padding: 12px 16px; background: var(--primary); color: #fff; border: none;
+    border-radius: var(--radius-sm); font-size: 14px; white-space: nowrap; font-weight: 600;
   }
   .manual-barcode-btn:disabled { opacity: 0.35; cursor: default; }
   .barcode-product-img { width: 100%; max-height: 160px; object-fit: contain; border-radius: var(--radius-sm); margin-bottom: 8px; }

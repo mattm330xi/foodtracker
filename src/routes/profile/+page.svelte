@@ -86,7 +86,10 @@
       theme = savedTheme;
       applyTheme(savedTheme);
     }
-    horizontalScroll = localStorage.getItem('ft_horizontalScroll') === 'true';
+    const savedScrollPref = localStorage.getItem('ft_horizontalScroll');
+    horizontalScroll = savedScrollPref !== null
+      ? savedScrollPref === 'true'
+      : window.matchMedia('(max-width: 700px)').matches;
 
     if (highlightSection === 'passkey') {
       setTimeout(() => {
