@@ -162,6 +162,8 @@ Before outputting any Svelte component or TS module:
 ### 5. Cleanup & Documentation
 - **README.md must be updated** after any feature addition, removal, or architecture change. Check it as part of cleanup before deploying.
 - **Push to GitHub before deploying.** Commit, push, then deploy. Never deploy uncommitted code.
+- **Clean up branches after pushing.** After merging or pushing to `main`, delete any local feature branches. Run `git branch -d <branch>` and `git push origin --delete <branch>` for remote branches.
+- **End-to-end tests required for all changes.** Every feature addition, bug fix, or behavior change MUST include corresponding tests in `src/lib/*.test.ts`. Tests should cover the happy path, edge cases, and the full flow (e.g., toggle on → toggle off, dedup behavior, empty input guard). If a test file doesn't exist for the module, create one.
 
 ### 6. Database Query Patterns
 - **Never use `date(created_at)` in WHERE clauses** — it wraps the indexed column in a function, preventing index usage. Use range comparisons instead: `created_at >= ? AND created_at < ?` with ISO timestamps.
