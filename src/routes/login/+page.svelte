@@ -360,7 +360,7 @@
           <div class="divider">or</div>
 
           <button type="button" class="link-btn" onclick={() => { authMethod = 'password'; error = ''; confirmMessage = ''; }}>
-            Use a password instead
+            Click here to use a password instead
           </button>
         {:else}
           <input
@@ -389,7 +389,7 @@
           <div class="divider">or</div>
 
           <button type="button" class="link-btn" onclick={() => { authMethod = 'passkey'; error = ''; confirmMessage = ''; password = ''; confirmPassword = ''; }}>
-            {mode === 'register' ? 'Use Face ID / Touch ID instead' : 'Use Face ID / Touch ID instead'}
+            {mode === 'register' ? 'Click here to use Face ID / Touch ID instead' : 'Click here to use Face ID / Touch ID instead'}
           </button>
         {/if}
       </form>
@@ -425,9 +425,9 @@
   .divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: #eee; }
   .divider::before { left: 0; }
   .divider::after { right: 0; }
-  .link-btn { background: none; border: none; color: #4CAF50; font-size: 13px; cursor: pointer; padding: 0; font-family: inherit; }
+  .link-btn { background: none; border: 1px solid transparent; color: #4CAF50; font-size: 15px; font-weight: 500; cursor: pointer; padding: 12px 16px; border-radius: 10px; font-family: inherit; width: 100%; box-sizing: border-box; }
   .register-mode .link-btn { color: #5B6CF7; }
-  .link-btn:hover { text-decoration: underline; }
+  .link-btn:hover { background: #f5f5f5; text-decoration: underline; }
   .toggle { background: none; border: none; color: #4CAF50; font-size: 13px; cursor: pointer; margin-top: 16px; padding: 0; font-family: inherit; }
   .register-mode .toggle { color: #5B6CF7; }
   .toggle:hover { text-decoration: underline; }
