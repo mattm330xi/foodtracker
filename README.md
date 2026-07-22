@@ -68,7 +68,7 @@ npm run check
 ```
 
 Test files:
-- `src/lib/barcodeScanner.test.ts` — scanner teardown lifecycle (8 tests)
+- `src/lib/barcodeScanner.test.ts` — scanner teardown lifecycle, stale-detection race (9 tests)
 - `src/lib/timezone.test.ts` — UTC/local conversion, no double-offset (6 tests)
 - `src/lib/entries.test.ts` — entries PATCH logic (meal/created_at/text, any combination), date filtering (8 tests)
 - `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)

@@ -938,10 +938,10 @@
         <button class="segmented-tab btn-press" class:active={barcodeMode === 'manual'} onclick={() => setBarcodeMode('manual')}>⌨️ Type Number</button>
       </div>
 
-      {#if barcodeMode === 'scan'}
+      {#if barcodeMode === 'scan' && scannerStatus !== 'success'}
         <BarcodeScanner bind:this={scannerComponent} onBarcode={handleBarcodeDetected} />
         <p class="scan-hint">Center the barcode in the frame</p>
-      {:else}
+      {:else if barcodeMode === 'manual'}
         <div class="manual-barcode-panel">
           <label for="manual-barcode-input" class="manual-label">Barcode number</label>
           <div class="manual-barcode-row">

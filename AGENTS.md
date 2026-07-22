@@ -37,7 +37,7 @@ npm test
 Runs all Vitest tests. All must be green before deploying.
 
 Test files:
-- `src/lib/barcodeScanner.test.ts` — scanner teardown lifecycle (8 tests)
+- `src/lib/barcodeScanner.test.ts` — scanner teardown lifecycle, stale-detection race (9 tests)
 - `src/lib/timezone.test.ts` — UTC/local conversion, no double-offset (6 tests)
 - `src/lib/entries.test.ts` — entries PATCH logic (meal/created_at/text, any combination), date filtering (8 tests)
 - `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)
@@ -107,7 +107,7 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 - Renders a `<video>` element for the camera feed
 - `startScanner()`: checks `BarcodeDetector` availability, creates detector with food formats (`upc_a`, `upc_e`, `ean_13`, `ean_8`), opens camera via `getUserMedia`, starts `requestAnimationFrame` scan loop
 - `stopScanner()`: `cancelAnimationFrame` + `track.stop()` + null ref — synchronous, clean teardown
-- `scanFrame()`: called via rAF, calls `detector.detect(video)`, debounces duplicate codes (3s), enforces 2s scan cooldown, calls `onBarcode` on match
+- `scanFrame()`: called via rAF, calls `detector.detect(video)`, debounces duplicate codes (3s), enforces 2s scan cooldown, calls `onBarcode` on match. Captures the in-scope `detector` as `activeDetector` before awaiting `detect()`, then re-checks `detector === activeDetector && stream` after — if `stopScanner()` ran while `detect()` was in flight, the stale result is discarded instead of calling `onBarcode` again. Without this, a barcode found right as the scanner stops could re-fire the callback and flicker the parent's UI back into "looking up".
 - `onDestroy`: cancels rAF, stops all tracks
 - Fallback message for browsers without `BarcodeDetector` (Safari < 15.4, older desktop)
 
@@ -115,7 +115,7 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 1. Looks up product on OpenFoodFacts API
 2. If user is authenticated, checks product ingredients against `user_allergens` table
 3. Returns `warnings` array with matching allergens
-4. Parent stops scanner on success (prevents re-detection flicker)
+4. Parent stops scanner on success (prevents re-detection flicker) and, in `+page.svelte`, unmounts `<BarcodeScanner>` entirely once `scannerStatus === 'success'` — leaving it mounted with a stopped stream showed a black video box next to the result.
 
 **Manual barcode entry:** Modal includes a text input below the camera for typing barcode numbers directly when camera scanning fails.
 

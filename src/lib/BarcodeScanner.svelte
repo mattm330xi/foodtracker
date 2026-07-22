@@ -29,8 +29,15 @@
     const video = document.getElementById(elementId) as HTMLVideoElement;
     if (!video || video.readyState < 2) return;
 
+    // Capture the detector this frame is scanning with. If stopScanner() runs
+    // while detect() is still in flight, this frame's result must be ignored —
+    // otherwise a stale detection fires onBarcode again after the scanner (and
+    // whatever UI reacted to the first detection) has already moved on.
+    const activeDetector = detector;
+
     try {
-      const barcodes = await detector.detect(video);
+      const barcodes = await activeDetector.detect(video);
+      if (detector !== activeDetector || !stream) return;
       for (const barcode of barcodes) {
         const code = barcode.rawValue;
         if (!code) continue;
