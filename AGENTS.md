@@ -44,7 +44,7 @@ Test files:
 - `src/lib/favorites.test.ts` — favorites CRUD, toggle flow, client-side isFavorited logic (16 tests)
 - `src/lib/pwaInstall.test.ts` — PWA install banner, platform detection, dismissal (14 tests)
 - `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation, needsPasskey, multi-device sessions (34 tests)
-- `src/lib/allergenMatch.test.ts` — allergen fuzzy-matching: exact/compound/misspelling cases, false-positive regressions (20 tests)
+- `src/lib/allergenMatch.test.ts` — allergen fuzzy-matching: exact/compound/misspelling cases, false-positive regressions (22 tests)
 
 ## Known Bugs (Fixed)
 
@@ -121,6 +121,8 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 
 **Adding entries to past/future dates:** POST `/api/entries` accepts an optional `date` field (YYYY-MM-DD). If provided, the entry's `created_at` is set to that date at the current time-of-day in the user's timezone. The client shows a confirmation modal for non-today dates (gentle for past, stronger for future). `skipPastWarning` is persisted to localStorage.
 
+**Add Entry with nothing attached:** clicking Add Entry with no text and no photo no longer silently no-ops. `addEntry()` sets `showEmptyEntryPrompt = true` instead, showing a dialog with "Add Photo" (triggers the hidden camera `<input>`) and "Scan Barcode" (opens `showBarcode`) options.
+
 **Editing an entry (pencil icon):** `startEditEntry`/`saveEditEntry` in `+page.svelte` open a single inline form covering note text, meal slot, and time together — not just meal/time. PATCH `/api/entries` accepts `meal`, `created_at`, and `text` independently or in any combination; it builds the `UPDATE` clause dynamically from whichever fields are present rather than branching on fixed combinations.
 
 ## Allergen System
@@ -129,7 +131,7 @@ Zero-dependency barcode scanner using the browser-native `BarcodeDetector` API. 
 - **Table:** `user_allergens` — one row per ingredient per user, UNIQUE constraint
 - **API:** `GET/POST/DELETE /api/allergens` — CRUD, requires auth
 - **Barcode scan:** `/api/barcode` reads session cookie, queries allergens, returns `warnings` array
-- **Fuzzy matching (`src/lib/allergenMatch.ts`):** `normalize()` replaces punctuation with a space (not deletes it, so "garlic)" or "corn/masa" don't merge into one token) before tokenizing. `fuzzyMatch()` requires every word of a multi-word allergen (e.g. "peanut butter") to appear somewhere in the ingredients — matching on just one word was a false-positive source. Per-token matching (`tokenMatches`) is intentionally conservative to avoid flagging allergens that aren't actually present: exact match; one-directional compound-word containment for allergen tokens ≥3 chars (allergen inside a longer ingredient word, e.g. "soy" in "soybean" — never the reverse); and Levenshtein distance for typos, but only between tokens ≥4 chars whose lengths differ by at most 1 (distance ≤1 for 4-5 char tokens, ≤2 for 6+), so a short unrelated word can't "fuzzy match" a longer allergen. Regression: this replaced a looser version that flagged allergens absent from the ingredients (e.g. "garlic" on a garlic-free product) via unbounded substring checks in both directions.
+- **Fuzzy matching (`src/lib/allergenMatch.ts`):** `normalize()` replaces punctuation with a space (not deletes it, so "garlic)" or "corn/masa" don't merge into one token) before tokenizing. `fuzzyMatch()` requires every word of a multi-word allergen (e.g. "peanut butter") to appear somewhere in the ingredients — matching on just one word was a false-positive source. Per-token matching (`tokenMatches`) is intentionally conservative to avoid flagging allergens that aren't actually present: exact match; one-directional compound-word containment for allergen tokens ≥3 chars (allergen inside a longer ingredient word, e.g. "soy" in "soybean" — never the reverse); and Levenshtein distance ≤1 for typos, only between tokens ≥4 chars whose lengths differ by at most 1. Two regressions fixed here: unbounded bidirectional substring checks flagged allergens absent from the ingredients (e.g. "garlic" on a garlic-free product), and a distance-≤2 allowance for 6+ char tokens matched unrelated real words by coincidence (e.g. "garlic" vs "malic" as in malic acid, on Hot Tamales candy, barcode 070970474088). Don't loosen the distance threshold above 1 without a specific reason — it re-opens exactly that failure mode.
 - **Scan result modal:** Orange banner `⚠️ Contains: garlic, onion` — non-blocking
 - **Saved entries:** Orange border + persistent warning banner on entries with allergen matches
 

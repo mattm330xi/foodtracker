@@ -75,7 +75,7 @@ Test files:
 - `src/lib/favorites.test.ts` — favorites CRUD, toggle flow, client-side isFavorited logic (16 tests)
 - `src/lib/pwaInstall.test.ts` — PWA install banner, platform detection, dismissal (14 tests)
 - `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation, needsPasskey, multi-device sessions (34 tests)
-- `src/lib/allergenMatch.test.ts` — allergen fuzzy-matching: exact/compound/misspelling cases, false-positive regressions (20 tests)
+- `src/lib/allergenMatch.test.ts` — allergen fuzzy-matching: exact/compound/misspelling cases, false-positive regressions (22 tests)
 
 ### Database
 

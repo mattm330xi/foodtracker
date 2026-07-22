@@ -35,14 +35,14 @@ export function tokenMatches(aToken: string, iToken: string): boolean {
   // allergen tokens long enough that a coincidental match is unlikely.
   if (aToken.length >= 3 && iToken.includes(aToken)) return true;
 
-  // Misspellings: allow a small edit distance, but only between tokens of
-  // near-identical length (differ by at most one character) so that trimming
-  // a couple of letters off either end of a longer word can't pass as a
-  // "misspelling" of an unrelated shorter one.
+  // Misspellings: allow only a single-character edit (one substitution,
+  // insertion, or deletion), and only between tokens of near-identical length.
+  // A distance of 2 is loose enough to match a real unrelated word by
+  // coincidence — e.g. "garlic" vs "malic" (as in malic acid) is 2 edits away
+  // but has nothing to do with garlic.
   if (aToken.length < 4 || iToken.length < 4) return false;
   if (Math.abs(aToken.length - iToken.length) > 1) return false;
-  const maxDistance = aToken.length <= 5 ? 1 : 2;
-  return levenshtein(aToken, iToken) <= maxDistance;
+  return levenshtein(aToken, iToken) <= 1;
 }
 
 export function fuzzyMatch(ingredientsText: string, allergen: string): boolean {

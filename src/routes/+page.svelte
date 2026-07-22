@@ -52,6 +52,7 @@
 
   // Date warning
   let showDateWarning = $state(false);
+  let showEmptyEntryPrompt = $state(false);
   let dateWarningType: 'past' | 'future' = $state('past');
   let pendingAddFn: (() => Promise<void>) | null = $state(null);
   let skipPastWarning = $state(false);
@@ -433,7 +434,10 @@
   }
 
   async function addEntry() {
-    if (!text && !imageBase64) return;
+    if (!text && !imageBase64) {
+      showEmptyEntryPrompt = true;
+      return;
+    }
     const mismatch = isDateMismatch();
     if (mismatch === 'past' && !skipPastWarning) {
       dateWarningType = 'past';
@@ -473,6 +477,15 @@
     loadDaysWithEntries(calendarYear, calendarMonth);
   }
 
+  function chooseEmptyEntryPhoto() {
+    showEmptyEntryPrompt = false;
+    cameraInput.click();
+  }
+
+  function chooseEmptyEntryBarcode() {
+    showEmptyEntryPrompt = false;
+    showBarcode = true;
+  }
 
   function startEditEntry(entry: Entry) {
     editingEntry = entry.id;
@@ -843,6 +856,22 @@
         <button class="confirm-cancel" onclick={() => deleteConfirm = null}>Cancel</button>
         <button class="confirm-delete" onclick={deleteItem}>Delete</button>
       </div>
+    </div>
+  {/if}
+
+  {#if showEmptyEntryPrompt}
+    <div class="confirm-overlay" onclick={() => showEmptyEntryPrompt = false}></div>
+    <div class="confirm-dialog">
+      <p>Nothing to add yet</p>
+      <p class="confirm-sub">Add a photo or scan a barcode to log this entry.</p>
+      <div class="empty-entry-actions">
+        <button class="empty-entry-btn btn-press" onclick={chooseEmptyEntryPhoto}>📷 Add Photo</button>
+        <button class="empty-entry-btn btn-press" onclick={chooseEmptyEntryBarcode}>
+          <svg width="16" height="16" viewBox="0 0 18 20" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="2" width="2" height="16" fill="currentColor"/><rect x="5" y="2" width="1" height="16" fill="currentColor"/><rect x="8" y="2" width="3" height="16" fill="currentColor"/><rect x="13" y="2" width="1" height="16" fill="currentColor"/><rect x="16" y="2" width="1" height="16" fill="currentColor"/></svg>
+          Scan Barcode
+        </button>
+      </div>
+      <button class="confirm-cancel btn-press" style="width:100%;margin-top:8px" onclick={() => showEmptyEntryPrompt = false}>Cancel</button>
     </div>
   {/if}
 
@@ -1387,6 +1416,13 @@
   }
   .confirm-dialog p { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
   .confirm-sub { color: var(--text-secondary); font-size: 14px !important; font-weight: 400 !important; margin-bottom: 16px !important; }
+  .empty-entry-actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+  .empty-entry-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 12px; background: var(--primary); color: #fff; border: none;
+    border-radius: var(--radius-sm); font-size: 15px; font-weight: 600;
+  }
+  .empty-entry-btn:hover { background: var(--primary-dark); }
   .confirm-actions { display: flex; gap: 8px; }
   .confirm-cancel { flex: 1; background: var(--muted-bg); border-color: var(--border-strong); }
   .confirm-delete { flex: 1; background: var(--danger); color: #fff; border-color: var(--danger); }

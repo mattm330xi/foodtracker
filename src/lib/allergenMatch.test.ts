@@ -42,9 +42,16 @@ describe('tokenMatches', () => {
     expect(tokenMatches('garlic', 'garljc')).toBe(true); // 1 substitution
   });
 
-  it('catches a 2-edit misspelling only for longer (6+ char) tokens', () => {
+  it('catches a single-letter misspelling regardless of position', () => {
     expect(tokenMatches('peanut', 'peanit')).toBe(true); // 1 edit
     expect(tokenMatches('peanut', 'peandt')).toBe(true); // 1 edit, different position
+  });
+
+  it('does not allow a 2-edit distance even for longer tokens', () => {
+    // Regression: "garlic" vs "malic" (as in malic acid) is 2 edits away and
+    // was previously allowed for 6+ char allergens — matched real ingredients
+    // (e.g. Hot Tamales candy) that have nothing to do with garlic.
+    expect(tokenMatches('garlic', 'malic')).toBe(false);
   });
 
   it('requires closer matches for short (4-5 char) tokens', () => {
@@ -92,6 +99,19 @@ describe('fuzzyMatch', () => {
   it('returns false for empty ingredients or empty allergen', () => {
     expect(fuzzyMatch('', 'garlic')).toBe(false);
     expect(fuzzyMatch('Corn, Salt', '')).toBe(false);
+  });
+
+  it('does not flag garlic on Hot Tamales candy (malic acid false-positive regression)', () => {
+    // Real ingredients from OpenFoodFacts for barcode 070970474088 — contains
+    // "malic acid" but no garlic. This previously matched via a 2-edit
+    // Levenshtein distance between "garlic" and "malic".
+    const ingredients =
+      'Sugar, corn syrup, modified food starch, contains less than 0.5% of the ' +
+      'following ingredients; fumaric acid, natural and artificial flavors, ' +
+      'sodium citrate, dextrin, citric acid, malic acid, artificial color, ' +
+      'confectioners glaze, red #40, carnauba wax, medium chain triglycerides, ' +
+      'yellow #5 (tartrazine), yellow #6, blue #1.';
+    expect(fuzzyMatch(ingredients, 'garlic')).toBe(false);
   });
 });
 
