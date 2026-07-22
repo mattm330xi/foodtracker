@@ -42,6 +42,7 @@
   let deleteType: 'entry' | 'reaction' = $state('entry');
   let daysWithEntries: Set<string> = $state(new Set());
   let daysWithReactions: Set<string> = $state(new Set());
+  let daysWithAllergenWarnings: Set<string> = $state(new Set());
   let dayEntryCounts: Map<string, number> = $state(new Map());
   let editingEntry: number | null = $state(null);
   let editMeal: string = $state('');
@@ -177,6 +178,7 @@
     const stored = value ? JSON.stringify(value) : null;
     entries = entries.map(e => e.id === id ? { ...e, allergen_warnings: stored } : e);
     allergenPickerEntry = null;
+    loadDaysWithEntries(calendarYear, calendarMonth);
   }
 
   function setQuickAddTab(tab: 'favorites' | 'templates' | 'repeat') {
@@ -261,9 +263,30 @@
     dayNotesExpanded = !!dayNotes;
   }
 
+  function entryHasAllergenWarning(entry: any): boolean {
+    if (entry.allergen_warnings) {
+      try {
+        const parsed = JSON.parse(entry.allergen_warnings);
+        if (Array.isArray(parsed) && parsed.length > 0) return true;
+      } catch {
+        // ignore malformed JSON
+      }
+    }
+    if (entry.barcode_data) {
+      try {
+        const bd = JSON.parse(entry.barcode_data);
+        if (bd.warnings?.length) return true;
+      } catch {
+        // ignore malformed JSON
+      }
+    }
+    return false;
+  }
+
   async function loadDaysWithEntries(year: number, month: number) {
     const eSet = new Set<string>();
     const rSet = new Set<string>();
+    const aSet = new Set<string>();
     const counts = new Map<string, number>();
     for (let day = 1; day <= getDaysInMonth(year, month); day++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -275,9 +298,11 @@
       const rData = await rRes.json();
       if (eData.length > 0) { eSet.add(dateStr); counts.set(dateStr, eData.length); }
       if (rData.length > 0) rSet.add(dateStr);
+      if (eData.some(entryHasAllergenWarning)) aSet.add(dateStr);
     }
     daysWithEntries = eSet;
     daysWithReactions = rSet;
+    daysWithAllergenWarnings = aSet;
     dayEntryCounts = counts;
   }
 
@@ -850,6 +875,7 @@
             {@const isSelected = dateStr === selectedDate}
             {@const hasEntries = daysWithEntries.has(dateStr)}
             {@const hasReaction = daysWithReactions.has(dateStr)}
+            {@const hasAllergenWarning = daysWithAllergenWarnings.has(dateStr)}
             {@const entryCount = dayEntryCounts.get(dateStr) || 0}
             {@const heatLevel = entryCount === 0 ? 0 : entryCount <= 2 ? 1 : entryCount <= 4 ? 2 : 3}
             <button
@@ -863,10 +889,17 @@
               title={entryCount > 0 ? `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'}` : undefined}
             >
               {day}
-              {#if hasReaction}
-                <span class="reaction-dot"></span>
-              {:else if hasEntries && !isToday && !isSelected}
-                <span class="dot"></span>
+              {#if hasReaction || (hasEntries && !isToday && !isSelected) || hasAllergenWarning}
+                <span class="day-dots">
+                  {#if hasReaction}
+                    <span class="reaction-dot"></span>
+                  {:else if hasEntries && !isToday && !isSelected}
+                    <span class="dot"></span>
+                  {/if}
+                  {#if hasAllergenWarning}
+                    <span class="allergen-dot" title="Allergen flagged"></span>
+                  {/if}
+                </span>
               {/if}
             </button>
           {/if}
@@ -1216,12 +1249,12 @@
           <div
             class="entry"
             class:entry-warning={entryBd?.warnings?.length || manualWarnings.length}
-            onclick={() => openAllergenPicker(entry)}
           >
             <div class="entry-header">
               <div class="entry-time">{timeOnly(entry.created_at)}</div>
-              <div class="entry-actions" onclick={(e) => e.stopPropagation()}>
+              <div class="entry-actions">
                 <button class="entry-btn star" class:star-active={isFavorited(entry)} onclick={() => toggleFavorite(entry)} aria-label={isFavorited(entry) ? 'Remove favorite' : 'Add favorite'}>⭐</button>
+                <button class="entry-btn warning" class:warning-active={manualWarnings.length > 0} onclick={() => openAllergenPicker(entry)} aria-label="Flag allergen">⚠️</button>
                 <button class="entry-btn edit" onclick={() => startEditEntry(entry)} aria-label="Edit entry">✎</button>
                 <button class="entry-btn delete" onclick={() => { deleteConfirm = entry.id; deleteType = 'entry'; }}>✕</button>
               </div>
@@ -1273,7 +1306,7 @@
                 <p class="entry-text" style="color:var(--danger);font-weight:600;font-size:12px;margin-bottom:2px">Allergens: {bd.allergens.join(', ')}</p>
               {/if}
               {#if bd.ingredients}
-                <details class="ingredients-details" onclick={(e) => e.stopPropagation()}>
+                <details class="ingredients-details">
                   <summary>Ingredients</summary>
                   <p class="entry-text" style="font-size:12px;color:var(--text-secondary);margin:4px 0 0">{bd.ingredients}</p>
                 </details>
@@ -1376,7 +1409,7 @@
   .no-entries { display: flex; align-items: center; gap: 8px; color: var(--text-tertiary); font-size: 13px; padding: 10px 0; }
   .no-entries-icon { font-size: 20px; opacity: 0.7; }
 
-  .entry { background: var(--surface); border-radius: var(--radius-md); padding: 12px; margin-bottom: 8px; box-shadow: var(--shadow-sm); transition: transform 0.1s, box-shadow 0.2s; cursor: pointer; }
+  .entry { background: var(--surface); border-radius: var(--radius-md); padding: 12px; margin-bottom: 8px; box-shadow: var(--shadow-sm); transition: transform 0.1s, box-shadow 0.2s; }
   .entry:active { transform: scale(0.99); }
   .entry.entry-warning { background: var(--warning-bg); box-shadow: none; }
   .entry.reaction { background: var(--danger-bg); box-shadow: none; }
@@ -1388,6 +1421,9 @@
   .entry-btn.star { filter: grayscale(1); opacity: 0.55; }
   .entry-btn.star:hover { opacity: 0.8; }
   .entry-btn.star-active { filter: none; opacity: 1; }
+  .entry-btn.warning { filter: grayscale(1); opacity: 0.55; }
+  .entry-btn.warning:hover { opacity: 0.8; }
+  .entry-btn.warning-active { filter: none; opacity: 1; }
   .entry-btn.edit { border: 1px solid var(--border-strong); }
   .entry-btn.edit:hover { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-bg); }
   .entry-btn.delete:hover { color: var(--danger); background: var(--danger-bg); }
@@ -1575,6 +1611,8 @@
   .day.heat-3 { background: var(--primary-dark); color: #fff; font-weight: 600; }
   .day.heat-3 .dot { background: #fff; }
   .day:hover:not(.empty):not(.selected):not(.today) { background: var(--border); }
-  .dot { display: block; width: 4px; height: 4px; border-radius: 50%; background: var(--primary); margin: 2px auto 0; }
-  .reaction-dot { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); margin: 2px auto 0; }
+  .day-dots { display: flex; align-items: center; justify-content: center; gap: 3px; margin-top: 2px; }
+  .dot { display: block; width: 4px; height: 4px; border-radius: 50%; background: var(--primary); }
+  .reaction-dot { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
+  .allergen-dot { display: block; width: 5px; height: 5px; border-radius: 50%; background: var(--warning); }
 </style>

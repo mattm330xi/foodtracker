@@ -15,7 +15,7 @@ A progressive web app for tracking everything you eat — photos, notes, organiz
 - **📊 Stats drawer** — food-reaction correlations, entry/reaction counts, and a daily trend chart over selectable periods, opens as a sheet over the main page (not a separate page)
 - **⭐ Quick Add** — one sheet with tabs for Favorites, Meal Templates, and one-tap "repeat yesterday" entries
 - **📷 Barcode scanner** — scan barcodes with your camera, look up products via Open Food Facts
-- **⚠️ Allergen warnings** — automatic on barcode-scanned products (matched against your ingredients), or flag any entry manually: tap a card to pick which of your allergens it contains, or mark it as a general "may contain an allergen" warning — useful for photo/note entries with no barcode
+- **⚠️ Allergen warnings** — automatic on barcode-scanned products (matched against your ingredients), or flag any entry manually via the warning icon on its card: pick which of your allergens it contains, or mark it as a general "may contain an allergen" warning — useful for photo/note entries with no barcode. Flagged days also show an indicator on the calendar.
 - **🔒 Authentication** — passkeys (Face ID / Touch ID) and/or passwords, your choice
 - **⚙️ Settings drawer** — manage timezone, allergens, passkeys, dark mode, meal view, sign out, opens as a sheet over the main page (not a separate page)
 - **📱 Installable PWA** — add to your home screen with guided install prompts
