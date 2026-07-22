@@ -83,37 +83,51 @@
 </main>
 
 <style>
-  main { max-width: 480px; margin: 0 auto; padding: 16px; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
   h1 { margin: 0 0 16px; display: flex; align-items: center; gap: 8px; }
-  h2 { margin: 0 0 8px; font-size: 16px; }
-  .back { text-decoration: none; color: #4CAF50; font-size: 20px; }
+  .back { text-decoration: none; color: var(--primary); font-size: 20px; }
 
-  .period-btns { display: flex; gap: 6px; margin-bottom: 16px; }
-  .period-btns button { flex: 1; padding: 8px; font-size: 13px; border: 1px solid #ccc; background: #f5f5f5; border-radius: 8px; cursor: pointer; }
-  .period-btns button.active { background: #4CAF50; color: #fff; border-color: #4CAF50; }
+  .period-btns { display: flex; gap: 4px; margin-bottom: 16px; background: var(--muted-bg); border-radius: var(--radius-sm); padding: 3px; }
+  .period-btns button {
+    flex: 1; padding: 8px; font-size: 13px; border: none;
+    background: none; border-radius: 6px; font-weight: 500; color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+  .period-btns button.active { background: var(--surface); color: var(--text-primary); box-shadow: var(--shadow-xs); }
 
-  .summary { display: flex; gap: 12px; margin-bottom: 20px; }
-  .stat-card { flex: 1; padding: 16px; border-radius: 12px; background: #e8f5e9; text-align: center; }
-  .stat-card.reaction { background: #ffebee; }
-  .stat-num { font-size: 28px; font-weight: 700; color: #2e7d32; }
-  .stat-card.reaction .stat-num { color: #c62828; }
-  .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
+  .summary { display: flex; gap: 12px; margin-bottom: 24px; }
+  .stat-card {
+    flex: 1; padding: 20px 16px; border-radius: var(--radius-md); text-align: center;
+    background: linear-gradient(135deg, var(--primary-bg), var(--primary-bg-strong));
+    box-shadow: var(--shadow-sm);
+  }
+  .stat-card.reaction { background: linear-gradient(135deg, var(--danger-bg), var(--danger-border)); }
+  .stat-num { font-size: 32px; font-weight: 700; color: var(--primary-dark); letter-spacing: -0.02em; }
+  .stat-card.reaction .stat-num { color: var(--danger); }
+  .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 500; }
 
-  .section { margin-bottom: 20px; }
-  .subtitle { font-size: 12px; color: #888; margin: 0 0 8px; }
+  .section { margin-bottom: 24px; }
+  .subtitle { font-size: 12px; color: var(--text-secondary); margin: 0 0 8px; }
 
-  .corr-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 6px; background: #fff5f5; }
+  .corr-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px; background: var(--surface); border-radius: var(--radius-sm);
+    margin-bottom: 6px; box-shadow: var(--shadow-xs);
+  }
   .corr-food { font-size: 14px; font-weight: 500; }
-  .corr-count { font-size: 12px; color: #c00; font-weight: 600; }
+  .corr-count { font-size: 12px; color: var(--danger); font-weight: 600; }
 
-  .reaction-item { padding: 10px 12px; border: 1px solid #ffcdd2; border-radius: 8px; margin-bottom: 6px; background: #fff5f5; }
-  .reaction-item small { color: #888; }
-  .reaction-item p { margin: 4px 0 0; font-size: 13px; color: #666; }
-  .severity { font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
-  .severity.s1 { background: #e8f5e9; color: #2e7d32; }
-  .severity.s2 { background: #fff3e0; color: #e65100; }
-  .severity.s3 { background: #fbe9e7; color: #c62828; }
-  .severity.s4 { background: #c62828; color: #fff; }
+  .reaction-item {
+    padding: 12px; background: var(--surface); border-radius: var(--radius-sm);
+    margin-bottom: 6px; box-shadow: var(--shadow-xs);
+  }
+  .reaction-item small { color: var(--text-tertiary); }
+  .reaction-item p { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); }
+  .severity { font-size: 11px; padding: 2px 8px; border-radius: var(--radius-full); margin-left: 6px; font-weight: 500; }
+  .severity.s1 { background: var(--primary-bg); color: var(--primary-dark); }
+  .severity.s2 { background: var(--warning-bg); color: var(--warning-text); }
+  .severity.s3 { background: var(--danger-bg); color: var(--danger); }
+  .severity.s4 { background: var(--danger); color: #fff; }
 
-  .empty, .loading { text-align: center; color: #aaa; padding: 32px 0; }
+  .empty, .loading { text-align: center; color: var(--text-tertiary); padding: 32px 0; }
 </style>

@@ -47,6 +47,26 @@
 
   let highlightSection = $state('');
 
+  // Preferences
+  let theme = $state<'light' | 'dark' | 'system'>('light');
+  let horizontalScroll = $state(false);
+
+  function applyTheme(t: 'light' | 'dark' | 'system') {
+    theme = t;
+    localStorage.setItem('ft_theme', t);
+    if (t === 'system') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', t);
+    }
+  }
+
+  function toggleHorizontalScroll() {
+    horizontalScroll = !horizontalScroll;
+    localStorage.setItem('ft_horizontalScroll', String(horizontalScroll));
+  }
+
   onMount(async () => {
     const params = new URLSearchParams(window.location.search);
     highlightSection = params.get('highlight') || '';
@@ -59,6 +79,14 @@
     loadCredentials();
     loadAllergens();
     loadAuthMethods();
+
+    // Load preferences
+    const savedTheme = localStorage.getItem('ft_theme') as 'light' | 'dark' | 'system' | null;
+    if (savedTheme) {
+      theme = savedTheme;
+      applyTheme(savedTheme);
+    }
+    horizontalScroll = localStorage.getItem('ft_horizontalScroll') === 'true';
 
     if (highlightSection === 'passkey') {
       setTimeout(() => {
@@ -211,6 +239,27 @@
     <div class="section"><div class="username">{user.username}</div></div>
 
     <div class="section">
+      <h2>Preferences</h2>
+      <div class="pref-row">
+        <span class="pref-label">Theme</span>
+        <div class="pref-control">
+          <button class="theme-btn" class:active={theme === 'light'} onclick={() => applyTheme('light')}>Light</button>
+          <button class="theme-btn" class:active={theme === 'dark'} onclick={() => applyTheme('dark')}>Dark</button>
+          <button class="theme-btn" class:active={theme === 'system'} onclick={() => applyTheme('system')}>System</button>
+        </div>
+      </div>
+      <div class="pref-row">
+        <span class="pref-label">Meal view</span>
+        <button class="toggle-btn" onclick={toggleHorizontalScroll}>
+          <span class="toggle-track" class:active={horizontalScroll}>
+            <span class="toggle-thumb"></span>
+          </span>
+          {horizontalScroll ? 'Carousel' : 'List'}
+        </button>
+      </div>
+    </div>
+
+    <div class="section">
       <h2>Timezone</h2>
       <select bind:value={timezone} onchange={saveTimezone} class="select">
         {#each TIMEZONES as tz}<option value={tz.value}>{tz.label}</option>{/each}
@@ -307,63 +356,86 @@
 </main>
 
 <style>
-  main { max-width: 480px; margin: 0 auto; padding: 16px; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
   h1 { margin: 0 0 16px; display: flex; align-items: center; gap: 8px; }
-  h2 { margin: 0 0 8px; font-size: 14px; color: #666; font-weight: 600; }
-  .back { text-decoration: none; color: #4CAF50; font-size: 20px; }
-  .section { margin-bottom: 24px; padding: 16px; background: #fff; border-radius: 12px; border: 1px solid #eee; }
-  .username { font-size: 20px; font-weight: 700; text-align: center; }
+  .back { text-decoration: none; color: var(--primary); font-size: 20px; }
+  .section { margin-bottom: 20px; padding: 16px; background: var(--surface); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+  .username { font-size: 22px; font-weight: 700; text-align: center; letter-spacing: -0.01em; }
   .select {
-    width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;
-    font-size: 14px; font-family: inherit; background: #fff;
+    width: 100%; padding: 10px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); font-size: 15px; background: var(--surface); color: var(--text-primary);
   }
   .cred-item {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 10px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 6px;
+    padding: 10px 12px; background: var(--muted-bg); border-radius: var(--radius-sm); margin-bottom: 6px;
   }
   .cred-info strong { display: block; font-size: 13px; }
-  .cred-info small { color: #888; font-size: 11px; }
+  .cred-info small { color: var(--text-tertiary); font-size: 11px; }
   .remove-btn {
-    background: none; border: 1px solid #ffcdd2; color: #c00;
-    padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
-    font-family: inherit;
+    background: none; border: 1px solid var(--danger-border); color: var(--danger);
+    padding: 4px 10px; border-radius: var(--radius-xs); font-size: 12px;
   }
-  .remove-btn:hover { background: #fff5f5; }
+  .remove-btn:hover { background: var(--danger-bg); }
   .add-btn {
-    width: 100%; padding: 10px; background: none; border: 1px dashed #ccc;
-    color: #888; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 6px;
-    font-family: inherit;
+    width: 100%; padding: 10px; background: none; border: 1px dashed var(--border-strong);
+    color: var(--text-tertiary); border-radius: var(--radius-sm); font-size: 13px; margin-top: 6px;
+    transition: border-color 0.15s, color 0.15s;
   }
-  .add-btn:hover { border-color: #4CAF50; color: #4CAF50; }
+  .add-btn:hover { border-color: var(--primary); color: var(--primary); }
   .logout {
-    width: 100%; padding: 10px; background: none; color: #c00;
-    border: 1px solid #ffcdd2; border-radius: 8px; font-size: 14px;
-    cursor: pointer; font-family: inherit;
+    width: 100%; padding: 10px; background: none; color: var(--danger);
+    border: 1px solid var(--danger-border); border-radius: var(--radius-sm); font-size: 14px;
   }
-  .logout:hover { background: #fff5f5; }
-  .error { background: #fff5f5; border: 1px solid #ffcdd2; color: #c00; padding: 8px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; }
-  .success { background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; padding: 8px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; }
-  .saving { font-size: 12px; color: #888; margin-left: 8px; }
-  .section-desc { font-size: 12px; color: #888; margin: 0 0 10px; }
+  .logout:hover { background: var(--danger-bg); }
+  .error { background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger); padding: 8px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 8px; }
+  .success { background: var(--primary-bg); border: 1px solid var(--primary-bg-strong); color: var(--primary-dark); padding: 8px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 8px; }
+  .saving { font-size: 12px; color: var(--text-tertiary); margin-left: 8px; }
+  .section-desc { font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; }
   .allergen-input-row { display: flex; gap: 6px; margin-bottom: 10px; }
-  .allergen-input { flex: 1; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; }
+  .allergen-input { flex: 1; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 15px; }
   .allergen-add { width: auto; padding: 8px 14px; margin: 0; }
   .allergen-list { display: flex; flex-wrap: wrap; gap: 6px; }
   .allergen-item { display: flex; align-items: center; gap: 4px; }
   .allergen-pill {
     display: inline-flex; align-items: center; gap: 4px;
-    background: #fff3e0; border: 1px solid #ffe0b2; color: #e65100;
-    padding: 4px 10px; border-radius: 16px; font-size: 13px; font-weight: 500;
+    background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text);
+    padding: 4px 10px; border-radius: var(--radius-full); font-size: 13px; font-weight: 500;
   }
-  .no-allergens { font-size: 13px; color: #ccc; margin: 0; }
-  .auth-method { padding: 10px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 6px; transition: border-color 0.3s, box-shadow 0.3s; }
-  .auth-method.highlighted { border-color: #4CAF50; box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.25); }
+  .no-allergens { font-size: 13px; color: var(--text-tertiary); margin: 0; }
+  .auth-method { padding: 12px; background: var(--muted-bg); border-radius: var(--radius-sm); margin-bottom: 8px; transition: box-shadow 0.3s; }
+  .auth-method.highlighted { box-shadow: 0 0 0 2px var(--primary), 0 0 0 4px var(--primary-bg); }
   .auth-method-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-  .auth-method-header strong { font-size: 13px; }
-  .auth-method-header small { color: #888; font-size: 11px; }
-  .auth-input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 6px; box-sizing: border-box; }
+  .auth-method-header strong { font-size: 14px; }
+  .auth-method-header small { color: var(--text-tertiary); font-size: 11px; }
+  .auth-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 15px; margin-bottom: 6px; box-sizing: border-box; background: var(--surface); }
   .auth-actions { display: flex; gap: 6px; }
-  .auth-save { flex: 1; padding: 8px; background: #4CAF50; color: #fff; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
-  .auth-save:hover { background: #388E3C; }
-  .auth-cancel { flex: 1; padding: 8px; background: #f5f5f5; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .auth-save { flex: 1; padding: 10px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; transition: transform 0.1s; }
+  .auth-save:active { transform: scale(0.97); }
+  .auth-cancel { flex: 1; padding: 10px; background: var(--muted-bg); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 13px; }
+
+  /* ── Preferences ─────────────────────────────────────── */
+  .pref-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
+  .pref-row + .pref-row { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 12px; }
+  .pref-label { font-size: 15px; font-weight: 500; }
+  .pref-control { display: flex; gap: 2px; background: var(--muted-bg); border-radius: var(--radius-sm); padding: 2px; }
+  .theme-btn {
+    padding: 6px 12px; border: none; background: none; border-radius: 6px;
+    font-size: 13px; font-weight: 500; color: var(--text-secondary); transition: all 0.15s;
+  }
+  .theme-btn.active { background: var(--surface); color: var(--text-primary); box-shadow: var(--shadow-xs); }
+  .toggle-btn {
+    display: flex; align-items: center; gap: 8px; background: none; border: none;
+    font-size: 13px; color: var(--text-secondary); padding: 4px 0;
+  }
+  .toggle-track {
+    width: 40px; height: 22px; border-radius: 11px; background: var(--border-strong);
+    position: relative; transition: background 0.2s; cursor: pointer;
+  }
+  .toggle-track.active { background: var(--primary); }
+  .toggle-thumb {
+    width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    position: absolute; top: 2px; left: 2px; transition: transform 0.2s var(--spring);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle-track.active .toggle-thumb { transform: translateX(18px); }
 </style>

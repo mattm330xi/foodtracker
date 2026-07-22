@@ -80,14 +80,14 @@
     ontouchmove={onTouchMove}
     ontouchend={onTouchEnd}
   >
-    <button class="pwa-dismiss" onclick={dismiss} aria-label="Dismiss">&times;</button>
+    <button class="pwa-dismiss btn-press" onclick={dismiss} aria-label="Dismiss">&times;</button>
     <div class="pwa-content">
       <span class="pwa-icon">📱</span>
       <div class="pwa-text">
         <strong>Install Food Tracker</strong>
         <span>Add to your home screen for quick access</span>
       </div>
-      <button class="pwa-install-btn" onclick={handleInstall}>Install</button>
+      <button class="pwa-install-btn btn-press" onclick={handleInstall}>Install</button>
     </div>
   </div>
 {/if}
@@ -102,7 +102,7 @@
     ontouchmove={onTouchMove}
     ontouchend={onTouchEnd}
   >
-    <button class="pwa-dismiss" onclick={dismiss} aria-label="Dismiss">&times;</button>
+    <button class="pwa-dismiss btn-press" onclick={dismiss} aria-label="Dismiss">&times;</button>
     <div class="pwa-content">
       <span class="pwa-icon">📲</span>
       <div class="pwa-text">
@@ -120,15 +120,15 @@
     left: 0;
     right: 0;
     z-index: 55;
-    padding: 12px 16px 16px;
-    border-radius: 16px 16px 0 0;
-    box-shadow: 0 -4px 16px rgba(0,0,0,0.15);
+    padding: calc(12px + var(--safe-bottom)) 16px calc(16px + var(--safe-bottom));
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: var(--shadow-sheet);
     transition: transform 0.15s ease-out, opacity 0.15s ease-out;
     touch-action: pan-x;
     user-select: none;
   }
-  .pwa-banner.android { background: linear-gradient(135deg, #2E7D32, #4CAF50); color: #fff; }
-  .pwa-banner.ios { background: linear-gradient(135deg, #1565C0, #42A5F5); color: #fff; }
+  .pwa-banner.android { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; }
+  .pwa-banner.ios { background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: #fff; }
   .pwa-dismiss {
     position: absolute;
     top: 6px;
@@ -159,9 +159,9 @@
   .pwa-text span { font-size: 12px; opacity: 0.9; }
   .pwa-install-btn {
     background: #fff;
-    color: #2E7D32;
+    color: var(--primary-dark);
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 8px 16px;
     font-weight: 700;
     font-size: 14px;
@@ -169,5 +169,5 @@
     flex-shrink: 0;
     white-space: nowrap;
   }
-  .pwa-install-btn:hover { background: #e8f5e9; }
+  .pwa-install-btn:hover { background: var(--primary-bg); }
 </style>

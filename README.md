@@ -20,6 +20,8 @@ A progressive web app for tracking everything you eat — photos, notes, organiz
 - **👤 Profile** — manage timezone, allergens, passkeys, sign out
 - **📱 Installable PWA** — add to your home screen with guided install prompts
 - **💾 Cloud storage** — all data stored in Cloudflare D1 (SQLite at the edge)
+- **🌗 Dark mode** — light/dark/system theme toggle in profile, backed by CSS custom properties
+- **↔️ Horizontal scroll view** — optional carousel layout for meal sections, toggle in profile
 
 ## Tech Stack
 
@@ -107,6 +109,7 @@ Passkeys (WebAuthn) and passwords. The flow:
 ```
 src/
 ├── app.html                    # HTML shell with viewport meta
+├── app.css                     # Global design tokens, reset, dark mode, skeleton/sheet utilities
 ├── app.d.ts                    # TypeScript types (App.Locals, Platform)
 ├── hooks.server.ts             # Session validation middleware
 ├── routes/
@@ -172,6 +175,15 @@ src/
 - **Native BarcodeDetector API for barcode scanning:** zero-dependency scanner using browser-native `BarcodeDetector` with explicit UPC-A/EAN-13 formats, `requestAnimationFrame` scan loop, synchronous teardown via `cancelAnimationFrame` + `track.stop()`. Includes manual barcode text input fallback.
 - **No voice button:** phone keyboards have built-in voice-to-text
 - **`npm run build` required before deploy:** `wrangler deploy` does not auto-build
+
+## Design System
+
+- **Tokens:** `src/app.css` defines all colors, radii, shadows, and easing curves as CSS custom properties (`--bg`, `--surface`, `--primary`, `--radius-md`, `--shadow-sm`, `--spring`, etc). No component should hardcode a hex color — reference a token instead.
+- **Dark mode:** `[data-theme="dark"]` overrides the token values. Toggled from the profile page (Light/Dark/System), stored in `localStorage` and applied via a `data-theme` attribute on `<html>`.
+- **Bottom sheets:** Modals slide up from the bottom using the `sheet-in`/`sheet-out` keyframes with a spring easing curve (`--spring`), rather than centered dialogs.
+- **Press feedback:** `.btn-press` utility class scales interactive elements to `0.97` on `:active` for native-feeling touch feedback.
+- **Skeleton loading:** `.skeleton` / `.skeleton-text` / `.skeleton-circle` utilities replace "Loading..." text with placeholders matching the real layout.
+- **Horizontal scroll toggle:** Meal sections default to vertical lists; users can opt into a horizontal snap-scroll layout from profile, persisted in `localStorage`.
 
 ## Deployment Notes
 

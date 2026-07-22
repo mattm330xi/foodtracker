@@ -4,8 +4,8 @@
   "description": "Track everything you eat with photos and notes",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#4CAF50",
+  "background_color": "#F8F6F0",
+  "theme_color": "#34C759",
   "orientation": "portrait",
   "icons": [
     {
