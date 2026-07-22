@@ -171,7 +171,8 @@ src/
 - **Passkeys + password fallback:** passkeys as primary auth (Touch ID / Face ID), optional password for browsers without WebAuthn support. Cross-method confirmation flow for adding a second auth method.
 - **Manual CBOR parsing + `crypto.subtle`:** avoids Node.js dependencies that don't work on Workers
 - **All timestamps as ISO 8601 UTC:** `new Date().toISOString()` in JS, not SQLite's `datetime('now')`
-- **Session cookie:** `HttpOnly; Secure; SameSite=Lax; Path=/` with 60-day Max-Age, rolling refresh on login
+- **Session cookie:** `HttpOnly; Secure; SameSite=Lax; Path=/` with 60-day Max-Age, refreshed on every authenticated request (rolling window) — not just at login
+- **Multiple devices:** signing in on a new device/browser does not sign out other devices; each has its own session row, and signing out only ends that one device's session
 - **Native BarcodeDetector API for barcode scanning:** zero-dependency scanner using browser-native `BarcodeDetector` with explicit UPC-A/EAN-13 formats, `requestAnimationFrame` scan loop, synchronous teardown via `cancelAnimationFrame` + `track.stop()`. Includes manual barcode text input fallback.
 - **No voice button:** phone keyboards have built-in voice-to-text
 - **`npm run build` required before deploy:** `wrangler deploy` does not auto-build

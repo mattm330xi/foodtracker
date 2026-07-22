@@ -52,6 +52,7 @@ Test files:
 - **saveEditEntry fire-and-forget** — Two separate PATCH calls were not awaited, causing race conditions on quick refresh. Fixed by combining into a single awaited PATCH with both `meal` and `created_at`.
 - **qr-scanner not detecting 1D barcodes** — qr-scanner library optimized for QR codes, failed to detect UPC-A/EAN-13 on mobile. Fixed by switching to Native BarcodeDetector API with explicit food barcode formats.
 - **Sessions weren't actually rolling** — `expires_at` was only ever set at login/register time and never touched again, so an active user still got logged out 60 days after their *last login* rather than their *last activity*. Fixed in `hooks.server.ts`: every authenticated request now pushes both the `sessions.expires_at` row and the `ft_session` cookie's `Max-Age` another 60 days out.
+- **Logging in on a second device silently logged out the first** — `login-password`, `login-finish` (passkey), and `logout` all ran `DELETE FROM sessions WHERE user_id = ?`, wiping every session for the account, not just the one being replaced. The app now supports multiple concurrent sessions per user (intentional — no single-session enforcement): `login-finish` only clears its own `auth:%` challenge session, `login-password` doesn't delete anything before inserting, and `logout` deletes only the calling device's own `(user_id, token)` row.
 
 ## Architecture Rules
 

@@ -62,7 +62,7 @@ async function isUsernameClaimable(db: any, userId: number): Promise<boolean> {
 function createMockDB() {
   const users: Map<number, any> = new Map();
   const credentials: Map<number, any> = new Map();
-  const sessions: Map<number, any> = new Map();
+  const sessions: Map<string, any> = new Map();
   let nextUserId = 1;
   let nextCredId = 1;
 
@@ -131,8 +131,18 @@ function createMockDB() {
             return { meta: { last_row_id: 1 } };
           }
           if (sql.startsWith('DELETE FROM sessions')) {
-            if (sql.includes('user_id = ?') && !sql.includes('AND token')) {
-              const userId = args[0];
+            const userId = args[0];
+            if (sql.includes('AND token LIKE ?')) {
+              const prefix = String(args[1]).replace(/%$/, '');
+              for (const [token, s] of sessions) {
+                if (s.user_id === userId && String(s.token).startsWith(prefix)) sessions.delete(token);
+              }
+            } else if (sql.includes('AND token = ?')) {
+              const matchToken = args[1];
+              for (const [token, s] of sessions) {
+                if (s.user_id === userId && s.token === matchToken) sessions.delete(token);
+              }
+            } else if (sql.includes('user_id = ?')) {
               for (const [token, s] of sessions) {
                 if (s.user_id === userId) sessions.delete(token);
               }
@@ -509,5 +519,55 @@ describe('auth edge cases', () => {
     await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(hash2, 1).run();
     expect(await verifyPassword('firstpass', users.get(1).password_hash)).toBe(false);
     expect(await verifyPassword('secondpass', users.get(1).password_hash)).toBe(true);
+  });
+});
+
+// ─── Multi-device session behavior ─────────────────────────
+// Logging in or signing out on one device must not affect sessions
+// that belong to the same user on other devices/browsers.
+
+describe('multi-device sessions', () => {
+  it('logging in again on a second device keeps the first device session', async () => {
+    const { db, sessions } = createMockDB();
+    await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
+      .bind(1, 'device-a-token', '2099-01-01').run();
+
+    // A second login for the same user must not delete the first device's session
+    // (mirrors login-password / login-finish no longer wiping all sessions for the user).
+    await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
+      .bind(1, 'device-b-token', '2099-01-01').run();
+
+    expect(sessions.has('device-a-token')).toBe(true);
+    expect(sessions.has('device-b-token')).toBe(true);
+  });
+
+  it('signing out on one device only removes that device session', async () => {
+    const { db, sessions } = createMockDB();
+    await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
+      .bind(1, 'device-a-token', '2099-01-01').run();
+    await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
+      .bind(1, 'device-b-token', '2099-01-01').run();
+
+    // Mirrors the logout action: delete only the session matching this device's token.
+    await db.prepare('DELETE FROM sessions WHERE user_id = ? AND token = ?')
+      .bind(1, 'device-a-token').run();
+
+    expect(sessions.has('device-a-token')).toBe(false);
+    expect(sessions.has('device-b-token')).toBe(true);
+  });
+
+  it('passkey login-finish only clears its own auth challenge session, not other devices', async () => {
+    const { db, sessions } = createMockDB();
+    await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
+      .bind(1, 'device-a-token', '2099-01-01').run();
+    await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
+      .bind(1, 'auth:challenge123:1', '2099-01-01').run();
+
+    // Mirrors login-finish: only the temporary auth: challenge session is cleared.
+    await db.prepare('DELETE FROM sessions WHERE user_id = ? AND token LIKE ?')
+      .bind(1, 'auth:%').run();
+
+    expect(sessions.has('auth:challenge123:1')).toBe(false);
+    expect(sessions.has('device-a-token')).toBe(true);
   });
 });

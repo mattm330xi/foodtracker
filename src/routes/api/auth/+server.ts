@@ -584,7 +584,10 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
         .bind(verified.newCounter ?? 0, cred.id ?? null)
         .run();
 
-      await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId ?? null).run();
+      // Only clear this login's own temporary challenge session — leave any other
+      // devices/browsers the user is already signed in on untouched.
+      await db.prepare('DELETE FROM sessions WHERE user_id = ? AND token LIKE ?')
+        .bind(userId ?? null, 'auth:%').run();
       const realToken = generateToken();
       const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
       await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
@@ -658,7 +661,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
         'SELECT 1 FROM credentials WHERE user_id = ? LIMIT 1',
       ).bind(user.id).first();
 
-      await db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id).run();
+      // Leave any other devices/browsers the user is already signed in on untouched.
       const sessionToken = generateToken();
       const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
       await db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)')
@@ -691,11 +694,13 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
     if (action === 'logout') {
       const session = cookies.get('ft_session');
       if (session) {
-        const userIdStr = session.split(':')[0];
-        if (userIdStr && !userIdStr.startsWith('reg:') && !userIdStr.startsWith('auth:')) {
+        // Only end this device's own session — other signed-in devices/browsers stay logged in.
+        const [userIdStr, ...tokenParts] = session.split(':');
+        const token = tokenParts.join(':');
+        if (userIdStr && token) {
           await db
-            .prepare('DELETE FROM sessions WHERE user_id = ?')
-            .bind(parseInt(userIdStr) ?? null)
+            .prepare('DELETE FROM sessions WHERE user_id = ? AND token = ?')
+            .bind(parseInt(userIdStr) ?? null, token)
             .run();
         }
       }
