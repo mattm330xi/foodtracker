@@ -41,6 +41,12 @@
   let dayNotes: string = $state('');
   let savingNotes = $state(false);
 
+  // Date warning
+  let showDateWarning = $state(false);
+  let dateWarningType: 'past' | 'future' = $state('past');
+  let pendingAddFn: (() => Promise<void>) | null = $state(null);
+  let skipPastWarning = $state(false);
+
   // Reaction form
   let showReactionForm = $state(false);
   let reactionSymptom = $state('');
@@ -80,6 +86,12 @@
 
   function today() {
     return new Date().toLocaleDateString('en-CA', { timeZone: timezone });
+  }
+
+  function isDateMismatch(): 'past' | 'future' | null {
+    const todayStr = today();
+    if (selectedDate === todayStr) return null;
+    return selectedDate < todayStr ? 'past' : 'future';
   }
 
   function toTimezoneDate(iso: string) {
@@ -154,6 +166,7 @@
     timezone = authData.user.timezone || 'America/New_York';
     username = authData.user.username;
     selectedDate = today();
+    skipPastWarning = localStorage.getItem('ft_skipPastWarning') === 'true';
 
     loadEntries(selectedDate);
     loadReactions(selectedDate);
@@ -183,9 +196,24 @@
   function selectDate(date: string) {
     selectedDate = date;
     showCalendar = false;
+    showDateWarning = false;
+    pendingAddFn = null;
     loadEntries(date);
     loadReactions(date);
     loadDayNotes(date);
+  }
+
+  function confirmDateWarning() {
+    if (dateWarningType === 'past') {
+      localStorage.setItem('ft_skipPastWarning', String(skipPastWarning));
+    }
+    showDateWarning = false;
+    pendingAddFn?.();
+  }
+
+  function cancelDateWarning() {
+    showDateWarning = false;
+    pendingAddFn = null;
   }
 
   function goToToday() {
@@ -263,10 +291,32 @@
 
   async function addEntry() {
     if (!text && !imageBase64) return;
+    const mismatch = isDateMismatch();
+    if (mismatch === 'past' && !skipPastWarning) {
+      dateWarningType = 'past';
+      pendingAddFn = doAddEntry;
+      showDateWarning = true;
+      return;
+    }
+    if (mismatch === 'future') {
+      dateWarningType = 'future';
+      pendingAddFn = doAddEntry;
+      showDateWarning = true;
+      return;
+    }
+    await doAddEntry();
+  }
+
+  async function doAddEntry() {
+    showDateWarning = false;
+    pendingAddFn = null;
+    const mismatch = isDateMismatch();
+    const body: Record<string, unknown> = { text, image: imageBase64 };
+    if (mismatch) body.date = selectedDate;
     const res = await fetch('/api/entries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, image: imageBase64 })
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       alert('Failed to save entry. The photo may be too large. Please try a smaller image.');
@@ -276,6 +326,8 @@
     entries = [...entries, { id, text, image: imageBase64, meal, created_at: new Date().toISOString(), day_notes: '', barcode_data: null }];
     text = '';
     imageBase64 = '';
+    loadEntries(selectedDate);
+    loadDaysWithEntries(calendarYear, calendarMonth);
   }
 
 
@@ -469,6 +521,26 @@
     if (!scannedProduct) return;
     text = scannedProduct.name || '';
     imageBase64 = '';
+    const mismatch = isDateMismatch();
+    if (mismatch === 'past' && !skipPastWarning) {
+      dateWarningType = 'past';
+      pendingAddFn = doAddBarcodeAsEntry;
+      showDateWarning = true;
+      return;
+    }
+    if (mismatch === 'future') {
+      dateWarningType = 'future';
+      pendingAddFn = doAddBarcodeAsEntry;
+      showDateWarning = true;
+      return;
+    }
+    await doAddBarcodeAsEntry();
+  }
+
+  async function doAddBarcodeAsEntry() {
+    showDateWarning = false;
+    pendingAddFn = null;
+    if (!scannedProduct) return;
     const barcodeData = JSON.stringify({
       name: scannedProduct.name,
       brand: scannedProduct.brand || '',
@@ -478,11 +550,13 @@
       barcode: scannedProduct.barcode || '',
       warnings: scannedProduct.warnings || [],
     });
-
+    const mismatch = isDateMismatch();
+    const body: Record<string, unknown> = { text, image: '', barcode_data: barcodeData };
+    if (mismatch) body.date = selectedDate;
     const res = await fetch('/api/entries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, image: '', barcode_data: barcodeData })
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       alert('Failed to save entry.');
@@ -494,6 +568,8 @@
     showBarcode = false;
     scannedProduct = null;
     manualBarcode = '';
+    loadEntries(selectedDate);
+    loadDaysWithEntries(calendarYear, calendarMonth);
   }
 
   function timeOnly(iso: string) {
@@ -591,6 +667,27 @@
       <div class="confirm-actions">
         <button class="confirm-cancel" onclick={() => deleteConfirm = null}>Cancel</button>
         <button class="confirm-delete" onclick={deleteItem}>Delete</button>
+      </div>
+    </div>
+  {/if}
+
+  {#if showDateWarning}
+    <div class="confirm-overlay" onclick={cancelDateWarning}></div>
+    <div class="confirm-dialog">
+      {#if dateWarningType === 'past'}
+        <p>Adding entry for {formatDateDisplay(selectedDate)}</p>
+        <p class="confirm-sub">This entry will be saved to {formatDateDisplay(selectedDate)}, not today ({formatDateDisplay(today())}).</p>
+        <label class="skip-warning-label">
+          <input type="checkbox" bind:checked={skipPastWarning} />
+          Don't warn me about past dates
+        </label>
+      {:else}
+        <p>Adding entry for {formatDateDisplay(selectedDate)}</p>
+        <p class="confirm-sub">You're adding an entry for a future date. Are you sure?</p>
+      {/if}
+      <div class="confirm-actions">
+        <button class="confirm-cancel" onclick={cancelDateWarning}>Cancel</button>
+        <button class="confirm-add" onclick={confirmDateWarning}>Add Anyway</button>
       </div>
     </div>
   {/if}
@@ -984,6 +1081,10 @@
   .confirm-actions { display: flex; gap: 8px; }
   .confirm-cancel { flex: 1; background: #f5f5f5; }
   .confirm-delete { flex: 1; background: #c00; color: #fff; border-color: #c00; }
+  .confirm-add { flex: 1; background: #4CAF50; color: #fff; border-color: #4CAF50; }
+  .confirm-add:hover { background: #388E3C; }
+  .skip-warning-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #666; margin-bottom: 16px; cursor: pointer; }
+  .skip-warning-label input { margin: 0; }
 
   .calendar-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 10; }
   .calendar {

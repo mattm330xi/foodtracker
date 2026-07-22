@@ -22,7 +22,7 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 };
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
-  const { text, image, meal, barcode_data } = await request.json();
+  const { text, image, meal, barcode_data, date } = await request.json();
   const db = platform!.env.FTD1;
   const userId = locals.userId;
 
@@ -36,9 +36,23 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
     else autoMeal = 'Snacks';
   }
 
+  let createdAt: string;
+  if (date) {
+    const tz = locals.timezone || 'America/New_York';
+    const now = new Date();
+    const timePart = now.toLocaleString('en-US', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      timeZone: tz,
+    });
+    const ms = String(now.getMilliseconds()).padStart(3, '0');
+    createdAt = `${date}T${timePart}.${ms}Z`;
+  } else {
+    createdAt = new Date().toISOString();
+  }
+
   const result = await db.prepare(
     'INSERT INTO entries (text, image, meal, user_id, created_at, barcode_data) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(text || '', image || '', autoMeal, userId, new Date().toISOString(), barcode_data || null).run();
+  ).bind(text || '', image || '', autoMeal, userId, createdAt, barcode_data || null).run();
   return json({ id: result.meta.last_row_id, success: true, meal: autoMeal });
 };
 
