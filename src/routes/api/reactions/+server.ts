@@ -8,7 +8,8 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
   const date = url.searchParams.get('date');
 
   if (date) {
-    const { start, end } = dateRange(date);
+    const tz = locals.timezone || 'America/New_York';
+    const { start, end } = dateRange(date, tz);
     const { results } = await db.prepare(
       "SELECT * FROM reactions WHERE user_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at ASC"
     ).bind(userId, start, end).all();

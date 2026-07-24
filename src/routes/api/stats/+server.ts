@@ -1,41 +1,46 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { dateRange, shiftDateStr, isoToLocalDateStr } from '$lib/dateRange';
 
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
   const db = platform!.env.FTD1;
   const userId = locals.userId;
   const days = parseInt(url.searchParams.get('days') || '7');
+  const tz = locals.timezone || 'America/New_York';
 
-  const since = new Date();
-  since.setDate(since.getDate() - days);
-  const sinceIso = since.toISOString();
+  // "Today" and the window start, both anchored to the user's local calendar day —
+  // not the server's (always-UTC) clock — so late-evening entries in UTC-negative
+  // timezones land in the correct day's bucket instead of tomorrow's.
+  const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+  const sinceDateStr = shiftDateStr(todayLocal, -(days - 1));
+  const sinceIso = dateRange(sinceDateStr, tz).start;
 
   const foods = await db.prepare(
-    "SELECT text, substr(created_at, 1, 10) as date FROM entries WHERE user_id = ? AND text != '' AND created_at >= ? ORDER BY created_at DESC"
+    "SELECT text, created_at FROM entries WHERE user_id = ? AND text != '' AND created_at >= ? ORDER BY created_at DESC"
   ).bind(userId, sinceIso).all();
 
   const reacts = await db.prepare(
-    "SELECT symptom, severity, notes, substr(created_at, 1, 10) as date FROM reactions WHERE user_id = ? AND created_at >= ? ORDER BY created_at DESC"
+    "SELECT symptom, severity, notes, created_at FROM reactions WHERE user_id = ? AND created_at >= ? ORDER BY created_at DESC"
   ).bind(userId, sinceIso).all();
 
-  const reactionDates = new Set(reacts.results.map((r: any) => r.date));
+  const reactsWithLocalDate = (reacts.results as any[]).map((r) => ({ ...r, date: isoToLocalDateStr(r.created_at, tz) }));
+  const reactionDates = new Set(reactsWithLocalDate.map((r) => r.date));
 
   const foodsByDate: Record<string, string[]> = {};
   for (const f of foods.results as any[]) {
-    if (!foodsByDate[f.date]) foodsByDate[f.date] = [];
-    foodsByDate[f.date].push(f.text);
+    const date = isoToLocalDateStr(f.created_at, tz);
+    if (!foodsByDate[date]) foodsByDate[date] = [];
+    foodsByDate[date].push(f.text);
   }
 
   const reactionCountByDate: Record<string, number> = {};
-  for (const r of reacts.results as any[]) {
+  for (const r of reactsWithLocalDate) {
     reactionCountByDate[r.date] = (reactionCountByDate[r.date] || 0) + 1;
   }
 
   const dailyCounts: Array<{ date: string; foods: number; reactions: number }> = [];
   for (let i = days - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = shiftDateStr(todayLocal, -i);
     dailyCounts.push({
       date: dateStr,
       foods: foodsByDate[dateStr]?.length || 0,
@@ -65,8 +70,8 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
   return json({
     days,
     totalFoods: (foods.results as any[]).length,
-    totalReactions: (reacts.results as any[]).length,
-    reactions: reacts.results,
+    totalReactions: reactsWithLocalDate.length,
+    reactions: reactsWithLocalDate,
     correlations: correlations.slice(0, 10),
     dailyCounts,
   });

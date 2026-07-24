@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { dateRange } from '$lib/dateRange';
+import { dateRange, zonedTimeToUtc } from '$lib/dateRange';
 
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
   const db = platform!.env.FTD1;
@@ -8,7 +8,8 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
   const date = url.searchParams.get('date');
 
   if (date) {
-    const { start, end } = dateRange(date);
+    const tz = locals.timezone || 'America/New_York';
+    const { start, end } = dateRange(date, tz);
     const { results } = await db.prepare(
       "SELECT * FROM entries WHERE user_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at ASC"
     ).bind(userId, start, end).all();
@@ -40,12 +41,14 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
   if (date) {
     const tz = locals.timezone || 'America/New_York';
     const now = new Date();
+    // Current time-of-day *in the user's timezone*, e.g. "20:15:03" — combined with
+    // the (past/future) local calendar date below via zonedTimeToUtc, which correctly
+    // resolves the pair to a true UTC instant instead of mislabeling local time as UTC.
     const timePart = now.toLocaleString('en-US', {
       hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
       timeZone: tz,
     });
-    const ms = String(now.getMilliseconds()).padStart(3, '0');
-    createdAt = `${date}T${timePart}.${ms}Z`;
+    createdAt = zonedTimeToUtc(date, timePart, tz).toISOString();
   } else {
     createdAt = new Date().toISOString();
   }

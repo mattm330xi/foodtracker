@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { dateRange } from './dateRange';
 
 // ─── Mock D1 database ──────────────────────────────────────
 function createMockDB() {
@@ -141,37 +142,42 @@ describe('entries PATCH logic', () => {
   });
 });
 
-describe('entries GET query logic', () => {
-  it('date filter uses SQLite date() on created_at (UTC)', () => {
-    // Simulates: SELECT * FROM entries WHERE user_id = ? AND date(created_at) = ?
-    // The key insight: date('2026-07-20T02:00:00Z') = '2026-07-20'
-    // But date('2026-07-19T22:00:00Z') = '2026-07-19'
-    // So if created_at is corrupted to shift by +4h, the date changes
+// Simulates the real GET handler's range filter: WHERE created_at >= start AND created_at < end,
+// using the actual dateRange() helper (not a hand-rolled approximation) so this test can't
+// silently drift from the real implementation.
+function filterByDate(entries: Array<{ id: number; created_at: string }>, date: string, timezone: string) {
+  const { start, end } = dateRange(date, timezone);
+  return entries.filter(e => e.created_at >= start && e.created_at < end);
+}
 
+describe('entries GET query logic', () => {
+  it('filters entries within a UTC day using dateRange bounds', () => {
     const entries = [
       { id: 1, created_at: '2026-07-20T18:00:00.000Z', meal: 'Lunch' },
-      { id: 2, created_at: '2026-07-20T22:00:00.000Z', meal: 'Snacks' }, // corrupted: was 18:00Z, shifted +4h
+      { id: 2, created_at: '2026-07-20T22:00:00.000Z', meal: 'Snacks' },
       { id: 3, created_at: '2026-07-21T02:00:00.000Z', meal: 'Dinner' },
     ];
 
-    // Filter for July 20
-    const date = '2026-07-20';
-    const filtered = entries.filter(e => {
-      const entryDate = new Date(e.created_at).toISOString().slice(0, 10);
-      return entryDate === date;
-    });
+    const filtered20 = filterByDate(entries, '2026-07-20', 'UTC');
+    expect(filtered20.map(e => e.id)).toEqual([1, 2]);
 
-    expect(filtered).toHaveLength(2);
-    expect(filtered.map(e => e.id)).toEqual([1, 2]);
+    const filtered21 = filterByDate(entries, '2026-07-21', 'UTC');
+    expect(filtered21.map(e => e.id)).toEqual([3]);
+  });
 
-    // The corrupted entry (id=2) shifted to July 21
-    const date21 = '2026-07-21';
-    const filtered21 = entries.filter(e => {
-      const entryDate = new Date(e.created_at).toISOString().slice(0, 10);
-      return entryDate === date21;
-    });
+  it('regression: a late-evening entry in America/New_York stays on its local day, not the next UTC day', () => {
+    // 8pm America/New_York on July 23 is stored as 2026-07-24T00:00:00.000Z in UTC.
+    // With naive UTC-midnight day boundaries this would only show up under "July 24".
+    // With timezone-aware boundaries it must show up under "July 23", matching what the
+    // user actually experienced when they added the entry.
+    const entries = [
+      { id: 1, created_at: '2026-07-24T00:00:00.000Z', meal: 'Snacks' }, // "key lime pie"
+    ];
 
-    expect(filtered21).toHaveLength(1);
-    expect(filtered21[0].id).toBe(3);
+    const july23 = filterByDate(entries, '2026-07-23', 'America/New_York');
+    expect(july23.map(e => e.id)).toEqual([1]);
+
+    const july24 = filterByDate(entries, '2026-07-24', 'America/New_York');
+    expect(july24).toHaveLength(0);
   });
 });

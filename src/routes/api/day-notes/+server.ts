@@ -8,7 +8,8 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
   const date = url.searchParams.get('date');
   if (!date) return json({ error: 'date required' }, { status: 400 });
 
-  const { start, end } = dateRange(date);
+  const tz = locals.timezone || 'America/New_York';
+  const { start, end } = dateRange(date, tz);
   const row = await db.prepare('SELECT day_notes FROM entries WHERE user_id = ? AND created_at >= ? AND created_at < ? AND day_notes != "" LIMIT 1')
     .bind(userId, start, end).first();
   return json({ notes: row?.day_notes || '' });
@@ -19,7 +20,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
   const db = platform!.env.FTD1;
   const userId = locals.userId;
 
-  const { start, end } = dateRange(date);
+  const tz = locals.timezone || 'America/New_York';
+  const { start, end } = dateRange(date, tz);
   const existing = await db.prepare('SELECT id FROM entries WHERE user_id = ? AND created_at >= ? AND created_at < ? LIMIT 1')
     .bind(userId, start, end).first();
   if (existing) {

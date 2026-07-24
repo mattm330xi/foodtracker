@@ -40,7 +40,8 @@ Test files:
 - `src/lib/barcodeScanner.test.ts` — scanner teardown lifecycle, stale-detection race (9 tests)
 - `src/lib/timezone.test.ts` — UTC/local conversion, no double-offset (6 tests)
 - `src/lib/entries.test.ts` — entries PATCH logic (meal/created_at/text/allergen_warnings, any combination), date filtering (11 tests)
-- `src/lib/dateRange.test.ts` — date range bounds for index-friendly queries (5 tests)
+- `src/lib/dateRange.test.ts` — timezone-aware date range bounds, zonedTimeToUtc DST handling, shiftDateStr, isoToLocalDateStr (24 tests)
+- `src/lib/stats.test.ts` — stats endpoint local-day bucketing (4 tests)
 - `src/lib/favorites.test.ts` — favorites CRUD, toggle flow, client-side isFavorited logic (16 tests)
 - `src/lib/pwaInstall.test.ts` — PWA install banner, platform detection, dismissal (14 tests)
 - `src/lib/auth.test.ts` — password hashing, registration/login flows, cross-method confirmation, needsPasskey, multi-device sessions (34 tests)
@@ -54,6 +55,7 @@ Test files:
 - **qr-scanner not detecting 1D barcodes** — qr-scanner library optimized for QR codes, failed to detect UPC-A/EAN-13 on mobile. Fixed by switching to Native BarcodeDetector API with explicit food barcode formats.
 - **Sessions weren't actually rolling** — `expires_at` was only ever set at login/register time and never touched again, so an active user still got logged out 60 days after their *last login* rather than their *last activity*. Fixed in `hooks.server.ts`: every authenticated request now pushes both the `sessions.expires_at` row and the `ft_session` cookie's `Max-Age` another 60 days out.
 - **Logging in on a second device silently logged out the first** — `login-password`, `login-finish` (passkey), and `logout` all ran `DELETE FROM sessions WHERE user_id = ?`, wiping every session for the account, not just the one being replaced. The app now supports multiple concurrent sessions per user (intentional — no single-session enforcement): `login-finish` only clears its own `auth:%` challenge session, `login-password` doesn't delete anything before inserting, and `logout` deletes only the calling device's own `(user_id, token)` row.
+- **Entries added in the evening landed on "tomorrow"** — `dateRange(dateStr)` computed UTC-midnight-aligned bounds (`${dateStr}T00:00:00.000Z` .. `+1 day`), but callers treated `dateStr` as the user's *local* calendar day. In a UTC-negative timezone (e.g. `America/New_York`), an entry created in the evening has a `created_at` past UTC midnight — correct UTC, but outside the naive UTC-day range for the local date the user actually experienced, so it appeared under the next day instead. Fixed by rewriting `dateRange.ts` to take a `timezone` parameter and compute true local-midnight-to-local-midnight bounds via `Intl.DateTimeFormat` offset lookups (`zonedTimeToUtc`, DST-aware with a two-pass refinement). All callers (`entries`, `reactions`, `day-notes`, `stats` API routes) now pass `locals.timezone`. Also fixed a related bug in `entries` POST: when a `date` was explicitly provided (e.g. backdating an entry), the current time-of-day was labeled as UTC without converting it (`` `${date}T${timePart}.${ms}Z` ``) — now correctly converted via `zonedTimeToUtc`. Client-side `shiftDay()` and `formatDateDisplay()` in `+page.svelte` also had timezone-inconsistent `Date` parsing, fixed to use pure calendar-math (`shiftDateStr`) and UTC-noon anchors respectively so they can't drift a day depending on the browser's own timezone.
 
 ## Architecture Rules
 

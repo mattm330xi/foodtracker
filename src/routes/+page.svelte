@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
+  import { shiftDateStr } from '$lib/dateRange';
 
   interface Entry {
     id: number;
@@ -31,7 +32,9 @@
 
   let entries: Entry[] = $state([]);
   let reactions: Reaction[] = $state([]);
-  let selectedDate = $state(new Date().toISOString().slice(0, 10));
+  // Placeholder until onMount resolves the real (tz-aware) today() — browser-local
+  // date, matching the calendarMonth/Year defaults below, not UTC.
+  let selectedDate = $state(new Date().toLocaleDateString('en-CA'));
   let showCalendar = $state(false);
   let calendarMonth = $state(new Date().getMonth());
   let calendarYear = $state(new Date().getFullYear());
@@ -369,12 +372,12 @@
   }
 
   function shiftDay(delta: number) {
-    const d = new Date(`${selectedDate}T00:00:00`);
-    d.setDate(d.getDate() + delta);
-    const newDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    if (d.getMonth() !== calendarMonth || d.getFullYear() !== calendarYear) {
-      calendarMonth = d.getMonth();
-      calendarYear = d.getFullYear();
+    const newDate = shiftDateStr(selectedDate, delta);
+    const [y, m] = newDate.split('-').map(Number);
+    const newMonth = m - 1;
+    if (newMonth !== calendarMonth || y !== calendarYear) {
+      calendarMonth = newMonth;
+      calendarYear = y;
       loadDaysWithEntries(calendarYear, calendarMonth);
     }
     selectDate(newDate);
@@ -452,7 +455,10 @@
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: timezone });
     if (dateStr === yesterdayStr) return 'Yesterday';
-    const d = new Date(dateStr + 'T12:00:00');
+    // Anchor at noon UTC (not a local-time parse) so formatting in `timezone` can never
+    // roll the calendar date backward/forward regardless of the browser's own timezone.
+    const [y, m, day] = dateStr.split('-').map(Number);
+    const d = new Date(Date.UTC(y, m - 1, day, 12));
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: timezone });
   }
 

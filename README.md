@@ -94,6 +94,8 @@ The D1 database `foodtrackerd1` is managed via migrations in `migrations/`. Key 
 
 All dates/times are stored as ISO 8601 UTC strings. The frontend converts to the user's configured timezone (default: `America/New_York`) for display. Meal auto-assignment uses the user's timezone.
 
+Day-boundary queries (`GET /api/entries?date=`, `reactions`, `day-notes`, `stats`) resolve a `YYYY-MM-DD` date string against the user's *local* calendar day, not UTC midnight — see `dateRange()` / `zonedTimeToUtc()` in `src/lib/dateRange.ts`. This matters because a naive UTC-midnight range mis-buckets entries created late in the evening in UTC-negative timezones (e.g. 8pm `America/New_York` is already past UTC midnight).
+
 ### Authentication
 
 Passkeys (WebAuthn) and passwords. The flow:
